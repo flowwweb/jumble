@@ -1,0 +1,15 @@
+node_modules/
+functions/node_modules/
+dist/
+.firebase/
+.env*
+!.env.example
+*-debug.log
+functions/shared/
+functions/data/
+.DS_Store
+data/puzzles.json
+data/dictionary/upstream/
+.cache/
+.secret.local
+functions.yaml

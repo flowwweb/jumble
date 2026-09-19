@@ -1,0 +1,119 @@
+{
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "jumble",
+      "runtime": "nodejs22",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".cache",
+        "dist",
+        "public",
+        "design",
+        "docs",
+        "launch",
+        "tests",
+        "*-debug.log",
+        ".env*",
+        ".secret.local",
+        "BUILD_STATUS.md",
+        "SWARM.md",
+        "data/dictionary/upstream"
+      ]
+    }
+  ],
+  "hosting": {
+    "site": "playjumble",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/checkout",
+        "function": {
+          "functionId": "payments",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/sponsors",
+        "function": {
+          "functionId": "payments",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/webhook",
+        "function": {
+          "functionId": "payments",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/api/**",
+        "function": {
+          "functionId": "api",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
+          }
+        ]
+      },
+      {
+        "source": "/data/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public,max-age=31536000,immutable"
+          }
+        ]
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "emulators": {
+    "hosting": {
+      "port": 5000
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "jumble",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "functions/index.mjs",
+  "scripts": {
+    "dev": "npm run build && npm run functions:manifest && node scripts/emulator-secrets.mjs && firebase emulators:start --only hosting,functions,firestore --project demo-jumble",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "tsc --noEmit && node --check functions/index.mjs",
+    "functions:manifest": "node scripts/functions-manifest.mjs",
+    "test:http": "node scripts/smoke-http.mjs",
+    "emulators": "firebase emulators:start --only hosting,functions,firestore --project demo-jumble"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "firebase-admin": "14.4.0",
+    "firebase-functions": "7.4.0",
+    "stripe": "22.6.2"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

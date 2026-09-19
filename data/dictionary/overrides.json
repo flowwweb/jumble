@@ -1,0 +1,31 @@
+{
+  "revision": "j2",
+  "policy": "Only a and i are playable one-letter words. Other alphabet symbols from the spellchecker vocabulary are excluded. Product correction relayed by Build owner on 2026-09-19. Additions require independently checked source evidence and an identified approving reviewer; this release makes no additions.",
+  "additions": [],
+  "exclusions": [
+    { "word": "b", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "c", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "d", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "e", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "f", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "g", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "h", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "j", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "k", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "l", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "m", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "n", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "o", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "p", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "q", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "r", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "s", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "t", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "u", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "v", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "w", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "x", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "y", "reason": "Alphabet symbol; only a and i are playable one-letter words." },
+    { "word": "z", "reason": "Alphabet symbol; only a and i are playable one-letter words." }
+  ]
+}
