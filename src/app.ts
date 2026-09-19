@@ -21,6 +21,39 @@ let puzzle: Puzzle, save: Save, dictionary: Set<string>;
 let selected: number[] = [], playing = false, submitting = false, sessionReady = false;
 let sessionRequest: Promise<void> | undefined;
 const colors: Record<string, string> = { A:'#FFB7BC',B:'#AADEB7',C:'#A9D2FF',D:'#FFE099',E:'#D7BFFF',F:'#BAC4FF',G:'#AADEB7',H:'#FFB7BC',I:'#FFE099',J:'#A9D2FF',K:'#D7BFFF',L:'#BAC4FF',M:'#FFE099',N:'#D7BFFF',O:'#FFB7BC',P:'#A9D2FF',Q:'#BAC4FF',R:'#A9D2FF',S:'#AADEB7',T:'#FFE099',U:'#FFB7BC',V:'#D7BFFF',W:'#A9D2FF',X:'#BAC4FF',Y:'#FFE099',Z:'#AADEB7' };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function animate(element: Element | null, frames: Keyframe[], duration = 220) {
+  if (!element || reducedMotion.matches) return;
+  element.getAnimations().forEach(animation => animation.cancel());
+  element.animate(frames, { duration, easing: 'cubic-bezier(.2,.8,.2,1)' });
+}
+function celebrate() {
+  if (reducedMotion.matches) return;
+  document.querySelector('.celebration')?.remove();
+  const layer = document.createElement('div'); layer.className = 'celebration'; layer.setAttribute('aria-hidden','true');
+  document.body.append(layer);
+  const palette = Object.values(colors).slice(0,6);
+  for (let i=0;i<42;i++) {
+    const spark = i>=26, particle = document.createElement('i');
+    particle.className = spark ? 'spark' : 'confetti';
+    const side = i<34?0:1, angle = ((i-26)%8)*Math.PI/4;
+    particle.style.background = palette[i%palette.length];
+    particle.style.left = `${spark ? (side?76:24) : 12+Math.random()*76}%`;
+    particle.style.top = spark ? '28%' : '-12px';
+    layer.append(particle);
+    const x = spark ? Math.cos(angle)*65 : (Math.random()-.5)*120;
+    const y = spark ? Math.sin(angle)*65 : Math.min(innerHeight*.7,520);
+    const animation = particle.animate([
+      {transform:'translate(0,0) rotate(0deg)',opacity:0},
+      {opacity:1,offset:.12},
+      {transform:`translate(${x}px,${y}px) rotate(${spark?0:360}deg)`,opacity:0}
+    ],{duration:spark?600:1250,delay:spark?180+side*160:Math.random()*160,easing:'cubic-bezier(.15,.6,.4,1)'});
+    animation.onfinish = () => { particle.remove(); if (!layer.childElementCount) layer.remove(); };
+  }
+}
+reducedMotion.addEventListener('change',()=>{
+  if (reducedMotion.matches) { document.getAnimations().forEach(animation=>animation.cancel()); document.querySelector('.celebration')?.remove(); }
+});
 const complete = () => save.used.length === 15;
 function persist() { storage.set(`jumble:${puzzle.id}`, JSON.stringify(save)); }
 function ensureSession() {
@@ -39,6 +72,7 @@ function toggleTile(index: number) {
   selected = selected.includes(index) ? selected.filter(i => i !== index) : [...selected, index];
   void ensureSession().catch(error => message(error.message));
   render();
+  animate(el(`tile-${index}`),[{scale:'.94'},{scale:'1'}],160);
   message(selected.length ? selected.map(i => puzzle.letters[i]).join('') : '');
 }
 function render() {
@@ -125,10 +159,10 @@ async function submit() {
 el('confirm').onclick = () => {
   if (!playing || !selected.length || complete()) return;
   const word = selected.map(i => puzzle.letters[i]).join('').toLowerCase();
-  if (!dictionary.has(word)) { message('Not in the word list.'); el('report-word').hidden=false; track('word_invalid'); return; }
+  if (!dictionary.has(word)) { message('Not in the word list.'); animate(el('word'),[{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}]); el('report-word').hidden=false; track('word_invalid'); return; }
   save.words.push(word); save.used.push(...selected); selected = []; persist(); render(); track('word_valid');
-  if (complete()) { message('Every letter used.'); el('share').focus(); void submit(); }
-  else { message(`${word.toUpperCase()} added.`); focusTile(); }
+  if (complete()) { message('Every letter used.'); animate(el('result'),[{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'translateY(0)'}],300); celebrate(); el('share').focus(); void submit(); }
+  else { animate(el('words').lastElementChild,[{opacity:0,transform:'translateY(5px) scale(.95)'},{opacity:1,transform:'translateY(0) scale(1)'}]); message(`${word.toUpperCase()} added.`); focusTile(); }
 };
 el('backspace').onclick = () => { if (complete()) return; selected.pop(); render(); message(selected.map(i => puzzle.letters[i]).join('')); };
 function resetAttempt() {
