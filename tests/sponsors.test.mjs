@@ -59,7 +59,7 @@ function fixture() {
     charges: { retrieve: async id => structuredClone(charges.get(id)) },
     disputes: { retrieve: async id => structuredClone(disputes.get(id)) },
   };
-  const service = createSponsorService({ db, stripe, origin: 'https://jumble.web.app', livemode: false, now: () => time,
+  const service = createSponsorService({ db, stripe, origin: 'https://jumbbble.web.app', allowedReturnOrigins: ['https://jumbbble.web.app', 'https://jumble.flowwweb.com'], livemode: false, now: () => time,
     getPuzzle: day => { if (!['2026-09-18', '2026-09-19'].includes(day)) throw new Error('PUZZLE_NOT_AVAILABLE'); return { id: day }; } });
   const event = (id = 'ch_1', type = 'charge.succeeded') => ({ type, livemode: false, data: { object: { id } } });
   return { db, stripe, service, calls, charges, disputes, event, advance: ms => { time += ms; } };
@@ -91,7 +91,7 @@ test('empty board has no seeds; checkout redirects grant no credit and metadata 
   assert.deepEqual(params.payment_intent_data.metadata, params.metadata);
   assert.equal(params.payment_method_types, undefined);
   assert.match(params.integration_identifier, /^jumble-sponsor-[a-z]{8}$/);
-  assert.equal(params.success_url, 'https://jumble.web.app/?sponsor=thanks');
+  assert.equal(params.success_url, 'https://jumbbble.web.app/?sponsor=thanks');
 });
 test('malicious payloads fail before provider work and stable IDs reject edited intent', async () => {
   const { service, calls } = fixture();
@@ -201,7 +201,7 @@ test('historical result context survives success/cancel with pinned origin and s
   assert.deepEqual(await service.checkout(uid, request), first);
   for (const [field, status] of [['success_url', 'thanks'], ['cancel_url', 'cancelled']]) {
     const url = new URL(calls[0].params[field]);
-    assert.equal(url.origin, 'https://jumble.web.app');
+    assert.equal(url.origin, 'https://jumbbble.web.app');
     assert.equal(url.pathname, '/');
     assert.equal(url.searchParams.get('sponsor'), status);
     assert.equal(url.searchParams.get('day'), '2026-09-18');
@@ -217,4 +217,42 @@ test('checkout rejects malformed, future, unpublished and open-redirect return c
     await assert.rejects(service.checkout(uid, input(changes)));
   }
   assert.equal(calls.length, 0);
+});
+
+test('both requested domains preserve historical checkout return context', async () => {
+  for (const origin of ['https://jumbbble.web.app', 'https://jumble.flowwweb.com']) {
+    const { service, calls } = fixture();
+    await service.checkout(uid, input({ puzzleId: '2026-09-18', returnTo: 'result', returnOrigin: 'https://evil.com' }), origin);
+    for (const field of ['success_url', 'cancel_url']) {
+      const returned = new URL(calls[0].params[field]);
+      assert.equal(returned.origin, origin);
+      assert.equal(returned.searchParams.get('day'), '2026-09-18');
+      assert.equal(returned.searchParams.get('view'), 'result');
+    }
+  }
+});
+test('unapproved request origins fail before storage/provider work', async () => {
+  const { service, calls, db } = fixture();
+  for (const origin of ['https://evil.com', 'https://playjumble.web.app', 'https://jumble.flowwweb.com.evil.com',
+    'http://jumble.flowwweb.com', 'https://jumble.flowwweb.com/path', 'https://user@jumble.flowwweb.com', 'null']) {
+    await assert.rejects(service.checkout(uid, input(), origin), { code: 'INVALID_RETURN_ORIGIN' });
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(db.records.size, 0);
+});
+test('uncertain provider response retries retain initiating origin and original idempotency parameters', async () => {
+  const { service, stripe, calls } = fixture();
+  const create = stripe.checkout.sessions.create;
+  let first = true;
+  stripe.checkout.sessions.create = async (...args) => {
+    const session = await create(...args);
+    if (first) { first = false; throw new Error('Simulated connection loss after provider creation'); }
+    return session;
+  };
+  const request = input({ puzzleId: '2026-09-18', returnTo: 'result' });
+  await assert.rejects(service.checkout(uid, request, 'https://jumble.flowwweb.com'));
+  await service.checkout(uid, request, 'https://jumbbble.web.app');
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], calls[1]);
+  assert.equal(new URL(calls[1].params.success_url).origin, 'https://jumble.flowwweb.com');
 });

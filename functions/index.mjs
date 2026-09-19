@@ -14,9 +14,10 @@ const db=getFirestore();
 const cookieSecret=defineSecret('JUMBLE_COOKIE_SECRET');
 const stripeKey=defineSecret('STRIPE_SECRET_KEY');
 const stripeWebhook=defineSecret('STRIPE_WEBHOOK_SECRET');
-const origin='https://playjumble.web.app';
+const origin='https://jumbbble.web.app';
+const publicOrigins=[origin,'https://jumble.flowwweb.com'];
 const emulator=process.env.FUNCTIONS_EMULATOR==='true';
-const allowedOrigins=new Set([origin,'https://playjumble.firebaseapp.com',...(emulator?['http://127.0.0.1:5000','http://localhost:5000']:[])]);
+const allowedOrigins=new Set([...publicOrigins,...(emulator?['http://127.0.0.1:5000','http://localhost:5000']:[])]);
 const readJson=path=>JSON.parse(readFileSync(new URL(path,import.meta.url),'utf8'));
 let game, sponsors, stripe;
 function gameService(){
@@ -24,7 +25,7 @@ function gameService(){
   return game;
 }
 function paymentServices(){
-  if(!stripe){stripe=new Stripe(stripeKey.value());sponsors=createSponsorService({db,stripe,origin,livemode:!stripeKey.value().includes('_test_'),getPuzzle:day=>gameService().getPuzzle(day)});}
+  if(!stripe){stripe=new Stripe(stripeKey.value());sponsors=createSponsorService({db,stripe,origin,allowedReturnOrigins:publicOrigins,livemode:!stripeKey.value().includes('_test_'),getPuzzle:day=>gameService().getPuzzle(day)});}
   return {sponsors,stripe};
 }
 function mac(value){return createHmac('sha256',cookieSecret.value()).update(value).digest('hex');}
@@ -79,7 +80,7 @@ async function handleRequest(req,res,payment=false){
     if(route==='session'&&req.method==='POST'){const result=await game.startSession(uid,req.body);await countEvent('game_start',uid,result.puzzleId);res.json(result);return;}
     if(route==='result'&&req.method==='POST'){const result=await game.submitResult(uid,req.body);await countEvent('puzzle_complete',uid,result.puzzleId);res.json(result);return;}
     if(route==='report'&&req.method==='POST'){res.json(await game.reportWord(uid,req.body));return;}
-    if(route==='checkout'&&req.method==='POST'){const result=await sponsors.checkout(uid,req.body);await countEvent('checkout_start',uid);res.json(result);return;}
+    if(route==='checkout'&&req.method==='POST'){const requestOrigin=req.get('origin');const returnOrigin=publicOrigins.includes(requestOrigin)?requestOrigin:origin;const result=await sponsors.checkout(uid,req.body,returnOrigin);await countEvent('checkout_start',uid);res.json(result);return;}
     if(route==='event'&&req.method==='POST'){if(!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
     res.status(404).json({error:'Not found.'});
   }catch(error){const known=error instanceof GameError||error instanceof SponsorError;console.error(JSON.stringify({event:'api_error',route,code:known?error.code:'INTERNAL'}));res.status(known?error.status:503).json({error:messages[error.code]||(known?'That request could not be accepted. Check your input and try again.':'Jumble could not connect. Please try again.'),code:known?error.code:'UNAVAILABLE'});}

@@ -43,9 +43,15 @@ function parseSubmission(uid, input) {
 }
 
 /** Only pass signature-verified events. Credentials, HTTP limits and cookie authority belong to the wrapper. */
-export function createSponsorService({ db, stripe, origin, livemode = true, now = Date.now, getPuzzle }) {
+export function createSponsorService({ db, stripe, origin, allowedReturnOrigins = [origin], livemode = true, now = Date.now, getPuzzle }) {
   const site = new URL(origin);
   if (site.protocol !== 'https:' || site.username || site.password) fail('INVALID_CHECKOUT_ORIGIN', 503);
+  const returnOrigins = new Set(allowedReturnOrigins);
+  for (const value of returnOrigins) {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || value !== url.origin) fail('INVALID_CHECKOUT_ORIGIN', 503);
+  }
+  if (!returnOrigins.has(site.origin)) fail('INVALID_CHECKOUT_ORIGIN', 503);
   if (typeof livemode !== 'boolean') fail('INVALID_STRIPE_MODE', 503);
   const prefix = livemode ? 'sponsorsLive' : 'sponsorsTest';
   const submissions = `${prefix}Submissions`;
@@ -62,7 +68,8 @@ export function createSponsorService({ db, stripe, origin, livemode = true, now 
       return { rows, total: rows.length, totalCents: entries.reduce((sum, row) => sum + row.cents, 0), topCents: entries[0]?.cents ?? 0 };
     },
 
-    async checkout(uid, input) {
+    async checkout(uid, input, requestOrigin = site.origin) {
+      if (!returnOrigins.has(requestOrigin)) fail('INVALID_RETURN_ORIGIN', 403);
       const payload = parseSubmission(uid, input);
       if (input.returnTo !== undefined && !['entry', 'result'].includes(input.returnTo)) fail('INVALID_RETURN_CONTEXT');
       if (input.puzzleId !== undefined) {
@@ -87,7 +94,7 @@ export function createSponsorService({ db, stripe, origin, livemode = true, now 
           transaction.get(listings.orderBy('cents', 'desc').limit(1)), transaction.get(listingRef),
         ]);
         const cents = checkoutCents(payload.mode, top.docs[0]?.data().cents ?? 0, current.exists ? current.data().cents : 0, input.amount);
-        const created = { ...payload, cents, fingerprint, createdAt: now(), livemode,
+        const created = { ...payload, cents, fingerprint, createdAt: now(), livemode, returnOrigin: requestOrigin,
           integrationIdentifier: `jumble-sponsor-${[...randomBytes(8)].map(byte => String.fromCharCode(97 + byte % 26)).join('')}` };
         transaction.set(reference, created);
         return created;
@@ -100,7 +107,10 @@ export function createSponsorService({ db, stripe, origin, livemode = true, now 
       if (now() - submission.createdAt > 22 * 60 * 60 * 1000) fail('SUBMISSION_EXPIRED', 409);
       const metadata = { project: 'jumble', kind: 'sponsor', sponsorId: id };
       const returnUrl = status => {
-        const url = new URL('/', site.origin);
+        // Persist the initiating approved origin so retries cannot move a checkout between sites.
+        const returnOrigin = submission.returnOrigin ?? site.origin;
+        if (!returnOrigins.has(returnOrigin)) fail('INVALID_RETURN_ORIGIN', 403);
+        const url = new URL('/', returnOrigin);
         url.searchParams.set('sponsor', status);
         if (submission.puzzleId) {
           url.searchParams.set('day', submission.puzzleId);

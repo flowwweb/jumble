@@ -25,7 +25,7 @@
     }
   ],
   "hosting": {
-    "site": "playjumble",
+    "site": "jumbbble",
     "public": "dist",
     "ignore": [
       "firebase.json",
