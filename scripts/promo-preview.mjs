@@ -48,6 +48,11 @@ export function createPromoServer(dist = fileURLToPath(new URL('../dist/', impor
       const within = relative(root, path);
       if (within.startsWith('..') || isAbsolute(within)) return json(403, { error: 'Outside preview build.' });
       let data = await readFile(path);
+      if (path === resolve(root, 'src/app.js')) {
+        const original = "function challengeUrl() { const url = new URL(location.origin); url.searchParams.set('day', puzzle.id); return url.href; }";
+        if (!data.toString().includes(original)) throw new Error('Preview share override needs updating.');
+        data = Buffer.from(data.toString().replace(original, "function challengeUrl() { return 'https://jumble.flowwweb.com/'; }"));
+      }
       if (path === resolve(root, 'index.html')) data = Buffer.from(data.toString().replace('</head>', '<style>#day::before{content:"Demo puzzle · "}#rank::before{content:"Sample result · "}</style></head>'));
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ico': 'image/x-icon', '.webp': 'image/webp' };
       res.writeHead(200, { 'Content-Type': types[extname(path)] || 'application/octet-stream', 'Cache-Control': 'no-store' });

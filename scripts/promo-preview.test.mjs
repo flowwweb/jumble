@@ -13,6 +13,10 @@ test('isolated promo exposes only the demo and validates its exact solve', async
   try {
     const html = await (await fetch(`${base}/`)).text();
     assert.match(html, /Demo puzzle/); assert.match(html, /Sample result/);
+    const app = await (await fetch(`${base}/src/app.js`)).text();
+    assert.match(app, /function challengeUrl\(\) \{ return 'https:\/\/jumble\.flowwweb\.com\/'; \}/);
+    const production = await readFile(new URL('../dist/src/app.js', import.meta.url), 'utf8');
+    assert.match(production, /url\.searchParams\.set\('day', puzzle\.id\)/);
     assert.deepEqual(await (await fetch(`${base}/api/puzzle?day=2026-09-19`)).json(), DEMO);
     assert.deepEqual((await (await fetch(`${base}/data/words-${DEMO.dictionaryVersion}.json`)).json()).words, ['outdoors', 'shelter']);
     const { sessionId } = await (await post('session', { puzzleId: DEMO.id })).json();
