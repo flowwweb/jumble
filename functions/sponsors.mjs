@@ -43,7 +43,7 @@ function parseSubmission(uid, input) {
 }
 
 /** Only pass signature-verified events. Credentials, HTTP limits and cookie authority belong to the wrapper. */
-export function createSponsorService({ db, stripe, origin, livemode = true, now = Date.now }) {
+export function createSponsorService({ db, stripe, origin, livemode = true, now = Date.now, getPuzzle }) {
   const site = new URL(origin);
   if (site.protocol !== 'https:' || site.username || site.password) fail('INVALID_CHECKOUT_ORIGIN', 503);
   if (typeof livemode !== 'boolean') fail('INVALID_STRIPE_MODE', 503);
@@ -64,6 +64,15 @@ export function createSponsorService({ db, stripe, origin, livemode = true, now 
 
     async checkout(uid, input) {
       const payload = parseSubmission(uid, input);
+      if (input.returnTo !== undefined && !['entry', 'result'].includes(input.returnTo)) fail('INVALID_RETURN_CONTEXT');
+      if (input.puzzleId !== undefined) {
+        if (typeof input.puzzleId !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.puzzleId)) fail('INVALID_RETURN_CONTEXT');
+        if (typeof getPuzzle !== 'function') fail('RETURN_CONTEXT_UNAVAILABLE', 503);
+        // The game authority rejects invalid dates, unpublished puzzles, and future days.
+        const puzzle = getPuzzle(input.puzzleId);
+        payload.puzzleId = puzzle.id;
+        payload.returnTo = input.returnTo ?? 'entry';
+      } else if (input.returnTo === 'result') fail('INVALID_RETURN_CONTEXT');
       const id = hash(`${payload.owner}:${input.submissionId}`);
       const fingerprint = hash(JSON.stringify(payload));
       const reference = db.doc(`${submissions}/${id}`);
@@ -90,12 +99,21 @@ export function createSponsorService({ db, stripe, origin, livemode = true, now 
       // Stripe may prune idempotency keys after 24 hours. Never recreate an old uncertain checkout.
       if (now() - submission.createdAt > 22 * 60 * 60 * 1000) fail('SUBMISSION_EXPIRED', 409);
       const metadata = { project: 'jumble', kind: 'sponsor', sponsorId: id };
+      const returnUrl = status => {
+        const url = new URL('/', site.origin);
+        url.searchParams.set('sponsor', status);
+        if (submission.puzzleId) {
+          url.searchParams.set('day', submission.puzzleId);
+          url.searchParams.set('view', submission.returnTo);
+        }
+        return url.href;
+      };
       const session = await stripe.checkout.sessions.create({
         mode: 'payment', integration_identifier: submission.integrationIdentifier,
         line_items: [{ price_data: { currency: 'usd', unit_amount: submission.cents,
           product_data: { name: 'Jumble sponsorship', description: 'Your listing appears after payment confirmation. Sponsor rank can change.' } }, quantity: 1 }],
         metadata, payment_intent_data: { metadata },
-        success_url: `${site.origin}/?sponsor=thanks`, cancel_url: `${site.origin}/?sponsor=cancelled`,
+        success_url: returnUrl('thanks'), cancel_url: returnUrl('cancelled'),
         expires_at: Math.floor(submission.createdAt / 1000) + 23 * 60 * 60,
       }, { idempotencyKey: `jumble:${livemode ? 'live' : 'test'}:sponsor:${id}` });
       if (session.livemode !== livemode || typeof session.url !== 'string' || !session.url.startsWith('https://checkout.stripe.com/')

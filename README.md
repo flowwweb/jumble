@@ -24,6 +24,11 @@ manifest with Firebase's SDK, writes fake emulator-only secrets if absent, and
 starts Hosting, Functions and Firestore under `demo-jumble`. No production data
 is used. Local Checkout deliberately has no working payment key. The manifest
 file route avoids a Windows loopback discovery timeout observed on this host.
+The emulator launcher allows up to 300 seconds for cold worker initialization
+using Firebase's supported `FUNCTIONS_DISCOVERY_TIMEOUT` setting (override it
+in the environment if needed). This is a local startup accommodation, not a
+production latency target. Wait for a successful HTTP smoke check before browser
+QA. Generator scripts are excluded from the Functions watcher and upload.
 
 ```sh
 npm run check
@@ -61,11 +66,16 @@ checking a real lexical source. No AI-generated word is accepted on its own.
 
 ## Puzzle runway
 
-The initial schedule contains730 unique boards from2026-09-19 through2028-09-17,
+The initial schedule contains 730 unique boards from 2026-09-19 through 2028-09-17,
 split evenly between verified two-word and three-word minima. Generation uses
 a smaller familiar vocabulary, but the optimum certificate checks the **entire
 accepted dictionary**. The general solver independently cross-checks selected
-dates. Two-word alternative counts are measured; three-word counts are not.
+dates. Each board also proves at least ten distinct unordered complete paths
+using at most two words above its minimum, and at least two reviewed familiar
+paths with different word-length patterns, including a familiar optimum.
+These capped counts are lower bounds, not exact totals. Budget-exhausted
+proposals are rejected. Gates, vocabulary provenance and hashes live in
+`data/dictionary/puzzle-manifest.json`.
 
 ```sh
 node scripts/puzzles-generate.mjs --days=730 --check
@@ -88,8 +98,9 @@ or switching devices loses local progress; there is no signup or cross-device
 account claim.
 
 An HttpOnly signed `__session` cookie identifies an anonymous installation.
-Firestore transactions preserve one timer and one immutable result per day and
-installation; resetting cannot restart that timer. Rank compares word count only.
+Firestore transactions preserve one timer and one best result per day and
+installation; replay can improve word count without adding another completion.
+Resetting cannot restart the timer. Rank compares word count only.
 Elapsed time is server-observed wall time, not an anti-cheat measure. Rank and
 tie counts are explicitly submission-time snapshots of submitted results, not
 invented players or claimed population percentiles. Anonymous identities can be
@@ -114,7 +125,7 @@ claimed.
 
 Jumble adapts Whack-A-Reset's actual sponsor economics and payment reconciliation:
 $1 minimum; whole USD; $10,000 cap; takeover computes the extra contribution
-needed to exceed the current leader by$1 while crediting the same URL's balance.
+needed to exceed the current leader by $1 while crediting the same URL's balance.
 Rank may move before payment confirmation. There are no seeded contributions.
 
 Stripe-hosted one-time Checkout uses server amounts and stable submission IDs.
@@ -150,6 +161,8 @@ After independent candidate QA and provider setup:
 
 ```sh
 npm ci
+node scripts/puzzles-generate.mjs --days=730
+node scripts/puzzles-generate.mjs --days=730 --check
 npm run check
 npm test
 npm run build

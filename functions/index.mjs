@@ -24,7 +24,7 @@ function gameService(){
   return game;
 }
 function paymentServices(){
-  if(!stripe){stripe=new Stripe(stripeKey.value());sponsors=createSponsorService({db,stripe,origin,livemode:!stripeKey.value().includes('_test_')});}
+  if(!stripe){stripe=new Stripe(stripeKey.value());sponsors=createSponsorService({db,stripe,origin,livemode:!stripeKey.value().includes('_test_'),getPuzzle:day=>gameService().getPuzzle(day)});}
   return {sponsors,stripe};
 }
 function mac(value){return createHmac('sha256',cookieSecret.value()).update(value).digest('hex');}
@@ -38,14 +38,14 @@ function identity(req,res){
 }
 async function limit(req,route){
   const minute=Math.floor(Date.now()/60000);
-  const hash=mac(`${minute}:${req.ip||'unknown'}:${route==='checkout'?'checkout':'game'}`);
+  const hash=mac(`${minute}:${req.ip||'unknown'}:${['checkout','report'].includes(route)?route:'game'}`);
   const ref=db.doc(`rateLimits/${hash}`);
-  await db.runTransaction(async tx=>{const doc=await tx.get(ref);const count=doc.exists?doc.data().count:0;if(count>=(route==='checkout'?5:120))throw new GameError('RATE_LIMITED',429);tx.set(ref,{count:count+1,expiresAt:new Date((minute+2)*60000)});});
+  await db.runTransaction(async tx=>{const doc=await tx.get(ref);const count=doc.exists?doc.data().count:0;if(count>=(['checkout','report'].includes(route)?5:120))throw new GameError('RATE_LIMITED',429);tx.set(ref,{count:count+1,expiresAt:new Date((minute+2)*60000)});});
 }
 const events=new Set(['puzzle_view','game_start','word_valid','word_invalid','puzzle_reset','puzzle_complete','share','theme_toggle','sponsor_open','checkout_start']);
-async function countEvent(name,uid){
+async function countEvent(name,uid,puzzleDay){
   if(!events.has(name))return;
-  const day=new Date().toISOString().slice(0,10);const ref=db.doc(`analytics/${day}`);
+  const day=puzzleDay||new Date().toISOString().slice(0,10);const ref=db.doc(`analytics/${day}`);
   if(name==='game_start'||name==='puzzle_complete'){
     const unique=db.doc(`analytics/${day}/dedup/${mac(`${name}:${uid}`)}`);
     await db.runTransaction(async tx=>{if((await tx.get(unique)).exists)return;tx.set(unique,{event:name});tx.set(ref,{[name]:FieldValue.increment(1)},{merge:true});});
@@ -76,8 +76,9 @@ async function handleRequest(req,res,payment=false){
     const sponsors=payment?paymentServices().sponsors:null;
     if(route==='puzzle'&&req.method==='GET'){const puzzle=game.getPuzzle(req.query.day);res.json(puzzle);return;}
     if(route==='sponsors'&&req.method==='GET'){res.json(await sponsors.list());return;}
-    if(route==='session'&&req.method==='POST'){const result=await game.startSession(uid,req.body);await countEvent('game_start',uid);res.json(result);return;}
-    if(route==='result'&&req.method==='POST'){const result=await game.submitResult(uid,req.body);await countEvent('puzzle_complete',uid);res.json(result);return;}
+    if(route==='session'&&req.method==='POST'){const result=await game.startSession(uid,req.body);await countEvent('game_start',uid,result.puzzleId);res.json(result);return;}
+    if(route==='result'&&req.method==='POST'){const result=await game.submitResult(uid,req.body);await countEvent('puzzle_complete',uid,result.puzzleId);res.json(result);return;}
+    if(route==='report'&&req.method==='POST'){res.json(await game.reportWord(uid,req.body));return;}
     if(route==='checkout'&&req.method==='POST'){const result=await sponsors.checkout(uid,req.body);await countEvent('checkout_start',uid);res.json(result);return;}
     if(route==='event'&&req.method==='POST'){if(!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
     res.status(404).json({error:'Not found.'});

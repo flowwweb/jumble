@@ -67,7 +67,7 @@ test('reject invalid words, incomplete/overused tiles, version and cross-user se
   await assert.rejects(game.submitResult('player-two-anonymous', input), { code: 'SESSION_NOT_FOUND' });
   assert.equal((await game.submitResult(uid, input)).total, 1);
 });
-test('concurrent retries produce one immutable result and honest tied count', async () => {
+test('concurrent retries produce one best result and honest tied count', async () => {
   const { game, advance } = fixture();
   const input = await submission(game);
   const [first, retry] = await Promise.all([game.submitResult(uid, input), game.submitResult(uid, input)]);
@@ -78,13 +78,19 @@ test('concurrent retries produce one immutable result and honest tied count', as
   assert.equal(second.total, 2);
   assert.equal(second.rank, 1);
   assert.equal(second.tied, 2);
-  assert.deepEqual(await game.submitResult(uid, { ...input, words: ['appletable', 'chair'] }), first);
+  const improved = await game.submitResult(uid, { ...input, words: ['appletable', 'chair'] });
+  assert.equal(improved.wordCount, 2);
+  assert.equal(improved.total, 2);
+  assert.equal(improved.firstCompletedAt, first.completedAt);
+  assert.equal(improved.elapsedMs, 20000);
+  assert.deepEqual(await game.submitResult(uid, input), improved);
+  assert.deepEqual(await game.submitResult(uid, { ...input, words: ['chair', 'appletable'] }), improved);
   const thirdInput = await submission(game, 'player-three-anonymous', ['appletable', 'chair']);
   const third = await game.submitResult('player-three-anonymous', thirdInput);
   assert.equal(third.rank, 1);
   assert.equal(third.total, 3);
   const fourthInput = await submission(game, 'player-four-anonymous');
-  assert.equal((await game.submitResult('player-four-anonymous', fourthInput)).rank, 2);
+  assert.equal((await game.submitResult('player-four-anonymous', fourthInput)).rank, 3);
 });
 test('historical completion remains bound to its puzzle after UTC rollover', async () => {
   const { game, advance } = fixture();

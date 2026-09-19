@@ -59,7 +59,8 @@ function fixture() {
     charges: { retrieve: async id => structuredClone(charges.get(id)) },
     disputes: { retrieve: async id => structuredClone(disputes.get(id)) },
   };
-  const service = createSponsorService({ db, stripe, origin: 'https://jumble.web.app', livemode: false, now: () => time });
+  const service = createSponsorService({ db, stripe, origin: 'https://jumble.web.app', livemode: false, now: () => time,
+    getPuzzle: day => { if (!['2026-09-18', '2026-09-19'].includes(day)) throw new Error('PUZZLE_NOT_AVAILABLE'); return { id: day }; } });
   const event = (id = 'ch_1', type = 'charge.succeeded') => ({ type, livemode: false, data: { object: { id } } });
   return { db, stripe, service, calls, charges, disputes, event, advance: ms => { time += ms; } };
 }
@@ -191,4 +192,29 @@ test('expired requests cannot create another checkout after Stripe idempotency r
   advance(24 * 60 * 60 * 1000);
   await assert.rejects(service.checkout(uid, input()), { code: 'CHECKOUT_EXPIRED' });
   assert.equal(calls.length, 1);
+});
+
+test('historical result context survives success/cancel with pinned origin and stable retry', async () => {
+  const { service, calls } = fixture();
+  const request = input({ puzzleId: '2026-09-18', returnTo: 'result', returnUrl: 'https://evil.com' });
+  const first = await service.checkout(uid, request);
+  assert.deepEqual(await service.checkout(uid, request), first);
+  for (const [field, status] of [['success_url', 'thanks'], ['cancel_url', 'cancelled']]) {
+    const url = new URL(calls[0].params[field]);
+    assert.equal(url.origin, 'https://jumble.web.app');
+    assert.equal(url.pathname, '/');
+    assert.equal(url.searchParams.get('sponsor'), status);
+    assert.equal(url.searchParams.get('day'), '2026-09-18');
+    assert.equal(url.searchParams.get('view'), 'result');
+  }
+  await assert.rejects(service.checkout(uid, { ...request, puzzleId: '2026-09-19' }), { code: 'SUBMISSION_CONFLICT' });
+  assert.equal(calls.length, 1);
+});
+test('checkout rejects malformed, future, unpublished and open-redirect return contexts before provider work', async () => {
+  const { service, calls } = fixture();
+  for (const changes of [{ puzzleId: '2026-09-20' }, { puzzleId: '2026-02-30' }, { puzzleId: '2026-01-01' },
+    { puzzleId: '//evil.com' }, { puzzleId: '2026-09-18', returnTo: 'https://evil.com' }, { returnTo: 'result' }]) {
+    await assert.rejects(service.checkout(uid, input(changes)));
+  }
+  assert.equal(calls.length, 0);
 });

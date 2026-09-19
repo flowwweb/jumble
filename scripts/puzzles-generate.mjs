@@ -3,11 +3,12 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RULES_VERSION, utcPuzzleId } from '../engine/index.mjs';
-import { createPartitionIndex, certifyWitness } from './puzzles-lib.mjs';
+import { createPartitionIndex, certifyWitness, certifyDiversity, DIVERSITY_GATE } from './puzzles-lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (name) => readFile(path.join(root, name), 'utf8');
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
+const started = performance.now();
 const daysArg = process.argv.find((arg) => arg.startsWith('--days='));
 const days = daysArg ? Number(daysArg.slice(7)) : 730;
 if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error('--days must be an integer from 1 to 3650.');
@@ -17,6 +18,18 @@ if (sha256(wordsRaw) !== manifest.sha256) throw new Error('Dictionary hash misma
 const generationRaw = await read('data/dictionary/generation.json');
 if (sha256(generationRaw) !== manifest.generationSha256) throw new Error('Generation dictionary hash mismatch.');
 const generation = new Set(JSON.parse(generationRaw));
+const index = createPartitionIndex(JSON.parse(wordsRaw));
+const shortWordsPath = 'data/dictionary/familiar-short-words-v1.json';
+const shortWordsRaw = (await read(shortWordsPath)).replaceAll('\r\n', '\n');
+const shortWords = JSON.parse(shortWordsRaw);
+const shortWordsSha256 = sha256(shortWordsRaw);
+if (shortWordsSha256 !== 'f7329ac8a7e9f985497725969f4b50b6720c6bd5f1d044fa870fe0d7bfd084d9'
+    || shortWords.status !== 'APPROVED_FOR_FAMILIAR_GENERATION'
+    || shortWords.dictionaryVersion !== manifest.version || shortWords.dictionarySha256 !== manifest.sha256
+    || !Array.isArray(shortWords.words) || new Set(shortWords.words).size !== shortWords.words.length
+    || shortWords.words.some((word) => !/^[a-z]{2,4}$/.test(word) || !index.dictionary.has(word))) {
+  throw new Error('Familiar short-word approval or dictionary binding failed.');
+}
 
 // Editorial familiarity candidates are admitted only when present in the pinned
 // size35 export. This list never adds a word to the accepted dictionary.
@@ -50,10 +63,12 @@ snowflake speaking squirrel starting sunshine surprise swimming teaching teamwor
 teaspoon together tomorrow treasure triangle tropical trousers umbrella vacation
 vegetable visitors watching weekend woodland workshop wrapping
 `.trim().split(/\s+/);
-const familiar = [...new Set(candidates)].filter((word) => generation.has(word)).sort();
+const familiar = [...new Set([...candidates.filter((word) => generation.has(word)), ...shortWords.words])].sort();
+const familiarIndex = createPartitionIndex(familiar);
+const gateSha256 = sha256(JSON.stringify(DIVERSITY_GATE));
+const familiarPoolSha256 = sha256(JSON.stringify(familiar));
 const groups = new Map([5, 7, 8].map((length) => [length, familiar.filter((word) => word.length === length)]));
 for (const [length, pool] of groups) if (pool.length < 20) throw new Error(`Insufficient familiar ${length}-letter words.`);
-const index = createPartitionIndex(JSON.parse(wordsRaw));
 const seed = 0x4a554d42;
 let state = seed;
 const random = (n) => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state % n; };
@@ -68,6 +83,7 @@ const puzzles = [];
 const seen = new Set();
 const lastUse = new Map();
 let proposals = 0;
+const diversityRejections = { INSUFFICIENT: 0, UNVERIFIED: 0 };
 while (puzzles.length < days) {
   if (++proposals > days * 1000) throw new Error('Candidate pool exhausted; extend reviewed familiarity candidates.');
   const target = puzzles.length % 2 === 0 ? 2 : 3;
@@ -82,9 +98,12 @@ while (puzzles.length < days) {
   if (vowels < 4 || vowels > 8 || maxRepeat > 4) continue;
   const certificate = certifyWitness(letters, solution, index);
   if (certificate.minimum !== target) continue;
+  const diversity = certifyDiversity(letters, solution, target, index, familiarIndex);
+  if (diversity.status !== 'PROVEN') { diversityRejections[diversity.status]++; continue; }
   const puzzle = {
     id: utcPuzzleId(start + puzzles.length * 86400000), letters: shuffle(letters),
     dictionaryVersion: manifest.version, minimum: certificate.minimum, solution: [...solution].sort(),
+    diversity: { ...diversity, gateSha256, familiarPoolSha256 },
   };
   if (certificate.optimalSolutionCount !== undefined) puzzle.optimalSolutionCount = certificate.optimalSolutionCount;
   puzzles.push(puzzle);
@@ -103,6 +122,7 @@ try {
   }
 } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const receipt = {
+  corpusVersion: 'j2-diversity-v1',
   dictionaryVersion: manifest.version, dictionarySha256: manifest.sha256, rulesVersion: RULES_VERSION,
   solver: 'exhaustive-short-partition-v1', solverSha256: sha256(await read('scripts/puzzles-lib.mjs')),
   generatorSha256: sha256(await read('scripts/puzzles-generate.mjs')), seed, start: puzzles[0].id,
@@ -116,8 +136,18 @@ const receipt = {
     editorial: 'Build Lab selected everyday objects, nature, activities, places, and ordinary descriptive words; complete used vocabulary is included for Product review.',
     independentHumanAcceptance: false,
   },
+  diversityGate: DIVERSITY_GATE, gateSha256, familiarPoolSha256,
+  familiarExpansion: { path: shortWordsPath, version: shortWords.version, sha256: shortWordsSha256,
+    reviewedBy: shortWords.reviewedBy, wordCount: shortWords.words.length },
+  diversitySummary: {
+    provenBoards: puzzles.length, rejectedProposals: diversityRejections,
+    minimumTotalPathsLowerBound: Math.min(...puzzles.map((puzzle) => puzzle.diversity.total.atLeast)),
+    minimumFamiliarPathsLowerBound: Math.min(...puzzles.map((puzzle) => puzzle.diversity.familiar.atLeast)),
+    minimumFamiliarLengthPatterns: Math.min(...puzzles.map((puzzle) => puzzle.diversity.familiar.wordLengthPatterns.length)),
+    maximumSearchNodesVisited: Math.max(...puzzles.flatMap((puzzle) => [puzzle.diversity.total.visitedNodes, puzzle.diversity.familiar.visitedNodes])),
+  },
   constraints: { minimumWordReuseGapDays: 14, vowelRange: [4, 8], maxRepeatedLetter: 4 },
-  claimLimits: 'Exact minima against all accepted words. Familiarity is an editorial candidate pool, not independent human acceptance. Three-word alternative counts are not measured.',
+  claimLimits: 'Exact minima against all accepted words. Diversity receipts prove capped lower bounds, not exact totals. Familiarity uses Product-inspected editorial candidates and the explicitly approved short-word expansion, not blanket size35 or human playtest acceptance.',
 };
 if (process.argv.includes('--check')) {
   if (await read('data/puzzles.json') !== puzzlesJson) throw new Error('Schedule reproducibility failed.');
@@ -125,4 +155,5 @@ if (process.argv.includes('--check')) {
   await writeFile(path.join(root, 'data/puzzles.json'), puzzlesJson);
   await writeFile(path.join(root, 'data/dictionary/puzzle-manifest.json'), `${JSON.stringify(receipt, null, 2)}\n`);
 }
-console.log(JSON.stringify({ count: receipt.count, start: receipt.start, end: receipt.end, minimumCounts: receipt.minimumCounts, sha256: receipt.sha256 }));
+console.log(JSON.stringify({ count: receipt.count, start: receipt.start, end: receipt.end, minimumCounts: receipt.minimumCounts, sha256: receipt.sha256,
+  diversity: receipt.diversitySummary, durationMs: Math.round(performance.now() - started) }));

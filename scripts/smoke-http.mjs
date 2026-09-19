@@ -4,8 +4,9 @@ const origin=process.argv[2]||'http://127.0.0.1:5000';
 if(!['127.0.0.1','localhost'].includes(new URL(origin).hostname))throw new Error('This mutation smoke test is restricted to local emulators.');
 let cookie='';
 async function request(path,body,extra={}){
-  const response=await fetch(`${origin}/api/${path}`,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'content-type':'application/json',origin}),...(cookie?{cookie}:{}),...extra},body:body===undefined?undefined:JSON.stringify(body)});
+  const response=await fetch(`${origin}/api/${path}`,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'content-type':'application/json',origin}),...(cookie?{cookie}:{}),...extra},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
   const setCookie=response.headers.get('set-cookie');if(setCookie)cookie=setCookie.split(';')[0];
+  if(response.status!==204)assert.match(response.headers.get('content-type')||'',/application\/json/,`${path}: HTTP ${response.status}, expected API JSON`);
   return {status:response.status,body:response.status===204?null:await response.json()};
 }
 const puzzle=await request('puzzle');assert.equal(puzzle.status,200);assert.equal(puzzle.body.letters.length,15);assert.equal('solution' in puzzle.body,false);assert.match(cookie,/^__session=/);
@@ -16,9 +17,20 @@ const wrong=await request('result',{puzzleId:puzzle.body.id,sessionId:session.bo
 const schedule=JSON.parse(await readFile('data/puzzles.json','utf8'));const witness=schedule.find(item=>item.id===puzzle.body.id);
 const words=witness.solution||witness.witness;
 assert.ok(Array.isArray(words),'schedule must include a witness');
+const longer=witness.diversity.familiar.solutions.find(path=>path.length>words.length);
+assert.ok(longer,'diversity receipt must include a longer familiar path');
+const first=await request('result',{puzzleId:puzzle.body.id,sessionId:session.body.sessionId,words:longer,dictionaryVersion:puzzle.body.dictionaryVersion});
+assert.equal(first.status,200);assert.equal(first.body.wordCount,longer.length);
 const payload={puzzleId:puzzle.body.id,sessionId:session.body.sessionId,words,dictionaryVersion:puzzle.body.dictionaryVersion};
 const result=await request('result',payload);assert.equal(result.status,200);assert.equal(result.body.wordCount,words.length);assert.equal(result.body.minimum,witness.minimum);assert.ok(result.body.elapsedMs>=0);
+assert.equal(result.body.total,first.body.total);
 const replay=await request('result',payload);assert.deepEqual(replay.body,result.body);
+const lexicon=new Set(JSON.parse(await readFile('data/dictionary/words.json','utf8')));
+const letters=Array.from(puzzle.body.letters).join('').toLowerCase();
+const missing=Array.from({length:15},(_,i)=>letters.slice(0,i+1)).find(word=>!lexicon.has(word));assert.ok(missing);
+const reportPayload={puzzleId:puzzle.body.id,dictionaryVersion:puzzle.body.dictionaryVersion,word:missing,reason:'Local emulator test fixture, not a dictionary admission request.'};
+const report=await request('report',reportPayload);assert.equal(report.status,200);assert.equal(report.body.status,'pending');
+const duplicateReport=await request('report',reportPayload);assert.equal(duplicateReport.body.duplicate,true);
 const sponsors=await request('sponsors');assert.equal(sponsors.status,200);assert.deepEqual(sponsors.body.rows,[]);
 const webhook=await request('webhook',{type:'charge.succeeded'});assert.equal(webhook.status,400);
-console.log(JSON.stringify({surface:'local Firebase emulators',puzzleId:puzzle.body.id,checks:['puzzle hides answer','signed session cookie','CSRF rejected','stable timer','invalid partition rejected','validated result','idempotent result','empty genuine sponsors','invalid webhook rejected'],wordCount:result.body.wordCount,rank:result.body.rank,total:result.body.total},null,2));
+console.log(JSON.stringify({surface:'local Firebase emulators',puzzleId:puzzle.body.id,checks:['puzzle hides answer','signed session cookie','CSRF rejected','stable timer','invalid partition rejected','validated result','best replay preserves total','idempotent result','pending word report','deduplicated report','empty genuine sponsors','invalid webhook rejected'],wordCount:result.body.wordCount,rank:result.body.rank,total:result.body.total},null,2));

@@ -61,11 +61,14 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
         ]);
         const session = sessionDoc.exists ? sessionDoc.data() : null;
         if (!session || session.sessionId !== input.sessionId || session.puzzleId !== puzzle.id) fail('SESSION_NOT_FOUND', 403);
-        if (resultDoc.exists) return resultDoc.data();
+        const previous = resultDoc.exists ? resultDoc.data() : null;
+        // Equal scores are not improvements. Replays keep one participant and one stable session timer.
+        if (previous && validated.wordCount >= previous.wordCount) return previous;
         const completedAt = now();
         if (!Number.isFinite(session.startedAt) || completedAt < session.startedAt) fail('INVALID_SESSION_TIME', 409);
         const counts = statsDoc.exists ? [...statsDoc.data().counts] : Array(16).fill(0);
         const wordCount = validated.wordCount;
+        if (previous) counts[previous.wordCount]--;
         counts[wordCount]++;
         const result = {
           puzzleId: puzzle.id, dictionaryVersion: puzzle.dictionaryVersion,
@@ -74,10 +77,43 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
           rank: 1 + counts.slice(1, wordCount).reduce((sum, count) => sum + count, 0),
           total: counts.reduce((sum, count) => sum + count, 0), tied: counts[wordCount],
           rankingAsOf: completedAt, rankingMetric: 'wordCount', completedAt,
+          firstCompletedAt: previous?.firstCompletedAt ?? previous?.completedAt ?? completedAt,
         };
         transaction.set(refs.result, result);
         transaction.set(refs.stats, { counts });
         return result;
+      });
+    },
+    async reportWord(uid, input) {
+      if (!input || typeof input !== 'object' || Array.isArray(input) || !dateId(input.puzzleId)) fail('INVALID_WORD_REPORT');
+      const puzzle = puzzleFor(input.puzzleId);
+      references(uid, puzzle.id); // Apply the same authenticated-identity contract as play.
+      if (input.dictionaryVersion !== puzzle.dictionaryVersion) fail('DICTIONARY_VERSION_MISMATCH', 409);
+      if (typeof input.word !== 'string' || !/^[a-z]{1,15}$/i.test(input.word)) fail('INVALID_REPORT_WORD');
+      const word = input.word.toLowerCase();
+      if (dictionary.has(word)) fail('WORD_ALREADY_ACCEPTED', 409);
+      const letters = [...puzzle.letters].map(letter => letter.toLowerCase());
+      for (const letter of word) {
+        const index = letters.indexOf(letter);
+        if (index < 0) fail('REPORT_WORD_NOT_IN_PUZZLE');
+        letters.splice(index, 1);
+      }
+      if (typeof input.reason !== 'string' || input.reason.length > 280 || !input.reason.trim()
+        || /[<>\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(input.reason)) fail('INVALID_REPORT_REASON');
+      const player = createHash('sha256').update(uid).digest('hex');
+      const id = createHash('sha256').update(JSON.stringify([puzzle.id, puzzle.dictionaryVersion, word, player])).digest('hex');
+      const report = db.doc(`wordReports/${id}`);
+      const limit = db.doc(`wordReportLimits/${utcPuzzleId(now())}/players/${player}`);
+      return db.runTransaction(async transaction => {
+        const existing = await transaction.get(report);
+        if (existing.exists) return { received: true, status: 'pending', duplicate: true };
+        const budget = await transaction.get(limit);
+        const count = budget.exists ? budget.data().count : 0;
+        if (count >= 5) fail('REPORT_RATE_LIMITED', 429);
+        transaction.set(report, { puzzleId: puzzle.id, dictionaryVersion: puzzle.dictionaryVersion,
+          word, reason: input.reason.trim(), status: 'pending', createdAt: now() });
+        transaction.set(limit, { count: count + 1 });
+        return { received: true, status: 'pending', duplicate: false };
       });
     },
   };

@@ -1,6 +1,7 @@
+import { readHistory, summarizeHistory, resultShare } from './results.js';
 type Puzzle = { id: string; letters: string[]; dictionaryVersion: string };
 type Result = { puzzleId: string; words: string[]; wordCount: number; minimum: number; elapsedMs: number; rank: number; total: number; tied: number; rankingAsOf: number };
-type Save = { version: 1; puzzleId: string; dictionaryVersion: string; words: string[]; used: number[]; order: number[]; sessionId?: string; result?: Result };
+type Save = { version: 1; puzzleId: string; dictionaryVersion: string; words: string[]; used: number[]; order: number[]; bestWords?: string[]; sessionId?: string; result?: Result };
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const message = (text: string) => { el('message').textContent = text; };
 const storage = {
@@ -10,6 +11,7 @@ const storage = {
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/${path}`, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
   if (response.status === 204) return undefined as T;
+  if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Jumble could not connect. Please try again.');
   const data = await response.json();
   if (!response.ok) throw Object.assign(new Error(data.error || 'Could not connect. Please try again.'), {code:data.code});
   return data as T;
@@ -70,9 +72,12 @@ function render() {
   el('remaining').textContent = `${15-save.used.length} left`;
   el('words').replaceChildren(...wordItems(save.words));
   el('entry').hidden = playing;
+  el('play').textContent = complete()?'View result':save.used.length?'Continue':'Play';
   el('play-header').hidden = !playing;
   el('game').hidden = !playing || complete();
   el('result').hidden = !playing || !complete();
+  el('view-best').hidden = !save.bestWords || complete();
+  el('report-word').hidden = true;
   if (complete()) showResult();
   if (focused && document.getElementById(focused) instanceof HTMLButtonElement) {
     const target = el<HTMLButtonElement>(focused);
@@ -83,16 +88,17 @@ function wordItems(words: string[]) {
   return words.map(word => { const li = document.createElement('li'); li.textContent = word.toUpperCase(); return li; });
 }
 function streak() {
-  let dates: string[] = [];
-  try { const parsed = JSON.parse(storage.get('jumble:completed') || '[]'); if (Array.isArray(parsed)) dates = parsed.filter(value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)); } catch {}
-  if (!dates.includes(puzzle.id)) dates.push(puzzle.id);
-  storage.set('jumble:completed', JSON.stringify(dates));
-  const completed = new Set(dates); let count = 0; let day = new Date().toISOString().slice(0,10);
-  if (!completed.has(day)) day = new Date(Date.parse(`${day}T00:00:00Z`)-86400000).toISOString().slice(0,10);
-  while (completed.has(day)) { count++; day = new Date(Date.parse(`${day}T00:00:00Z`)-86400000).toISOString().slice(0,10); }
+  const rows = readHistory(storage.get('jumble:history'));
+  const old = rows.find(row=>row.day===puzzle.id);
+  if (!old || save.words.length<=old.words.length) {
+    storage.set('jumble:history',JSON.stringify([...rows.filter(row=>row.day!==puzzle.id),{day:puzzle.id,words:save.words,minimum:save.result?.minimum??old?.minimum}]));
+  }
+  if (!save.bestWords || save.words.length<save.bestWords.length) { save.bestWords=[...save.words]; persist(); }
+  const count = summarizeHistory(readHistory(storage.get('jumble:history')),new Date().toISOString().slice(0,10)).current;
   el('streak').textContent = count ? `${count} day${count===1?'':'s'} in a row on this device` : '';
 }
 function showResult() {
+  el<HTMLButtonElement>('replay').disabled=submitting;
   el('result-title').textContent = `${save.words.length} word${save.words.length===1?'':'s'}. All 15 letters.`;
   el('result-words').replaceChildren(...wordItems(save.words));
   el('result-detail').textContent = save.result ? (save.words.length===save.result.minimum ? 'You found the minimum.' : `The fewest possible: ${save.result.minimum}.`) : 'Solved on this device. Online result not yet verified.';
@@ -110,24 +116,30 @@ async function submit() {
     const result = await api<Result>('result', {puzzleId:puzzle.id,sessionId:save.sessionId,words:save.words,dictionaryVersion:puzzle.dictionaryVersion});
     // Only the current authenticated server response can establish a rank or minimum.
     save.result = result; save.words = result.words; persist(); render();
+    if (el<HTMLDialogElement>('share-dialog').open) updateShare();
   } catch (error) {
     el('rank').textContent = `${error instanceof Error?error.message:'Could not submit your result.'} Your solve is saved on this device.`;
     el('retry-submit').hidden = false;
-  } finally { submitting = false; }
+  } finally { submitting = false; el<HTMLButtonElement>('replay').disabled=false; }
 }
 el('confirm').onclick = () => {
   if (!playing || !selected.length || complete()) return;
   const word = selected.map(i => puzzle.letters[i]).join('').toLowerCase();
-  if (!dictionary.has(word)) { message('Not in the word list.'); track('word_invalid'); return; }
+  if (!dictionary.has(word)) { message('Not in the word list.'); el('report-word').hidden=false; track('word_invalid'); return; }
   save.words.push(word); save.used.push(...selected); selected = []; persist(); render(); track('word_valid');
   if (complete()) { message('Every letter used.'); el('share').focus(); void submit(); }
   else { message(`${word.toUpperCase()} added.`); focusTile(); }
 };
 el('backspace').onclick = () => { if (complete()) return; selected.pop(); render(); message(selected.map(i => puzzle.letters[i]).join('')); };
-el('reset').onclick = () => {
-  if (complete()) return;
-  if (save.words.length && !confirm('Reset this attempt? Your words will return to the board.')) return;
-  save.words = []; save.used = []; selected = []; persist(); render(); message('A fresh start. Same 15 letters.'); track('puzzle_reset'); focusTile();
+function resetAttempt() {
+  save.words = []; save.used = []; delete save.result; selected = []; persist(); render(); message('A fresh start. Same 15 letters.'); track('puzzle_reset'); focusTile();
+}
+el('reset').onclick = () => { if (save.words.length) el<HTMLDialogElement>('reset-dialog').showModal(); else resetAttempt(); };
+el('reset-confirm').onclick = () => { el<HTMLDialogElement>('reset-dialog').close(); resetAttempt(); };
+el('replay').onclick = () => { if (!submitting) resetAttempt(); };
+el('view-best').onclick = () => {
+  if (!save.bestWords) return;
+  save.words=[...save.bestWords];save.used=Array.from({length:15},(_,i)=>i);selected=[];persist();render();void submit();
 };
 el('shuffle').onclick = () => {
   if (complete()) return;
@@ -147,26 +159,63 @@ el('play').onclick = () => {
 };
 el('back').onclick = () => { playing = false; render(); el('play').focus(); };
 el('retry-load').onclick = () => location.reload();
-el('share').onclick = async () => {
-  if (!complete()) return;
-  const url = new URL(location.origin); url.searchParams.set('day',puzzle.id);
-  const text = `JUMBLE ${puzzle.id}\n${save.words.length} words · 15 letters${save.result&&save.words.length===save.result.minimum?' · Minimum found':''}\n${save.words.map(word=>'🟦'.repeat(word.length)).join('\n')}\nSame letters. Different minds.\n${url}`;
+function challengeUrl() { const url=new URL(location.origin);url.searchParams.set('day',puzzle.id);return url.href; }
+function shareText() { return resultShare(puzzle.id,save.words,challengeUrl(),el<HTMLInputElement>('reveal-words').checked,save.result?.minimum); }
+function updateShare() {
+  el<HTMLTextAreaElement>('share-preview').value=shareText();
+  el<HTMLAnchorElement>('share-x').href=`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText())}`;
+}
+el('share').onclick = () => { el<HTMLInputElement>('reveal-words').checked=false;updateShare();el('share-status').textContent='';el<HTMLDialogElement>('share-dialog').showModal(); };
+el('reveal-words').onchange=updateShare;
+async function copyShare(text: string) {
+  try { await navigator.clipboard.writeText(text);el('share-status').textContent='Copied.';track('share'); }
+  catch { const area=el<HTMLTextAreaElement>('share-preview');area.value=text;area.focus();area.select();el('share-status').textContent='Select and copy the text above.'; }
+}
+el('copy-result').onclick=()=>void copyShare(shareText());
+el('copy-link').onclick=()=>void copyShare(challengeUrl());
+el('native-share').onclick=async()=>{
+  try { if(navigator.share){await navigator.share({text:shareText()});track('share');}else await copyShare(shareText()); }
+  catch(error){if(!(error instanceof DOMException && error.name==='AbortError'))await copyShare(shareText());}
+};
+el('download-result').onclick=async()=>{
   try {
-    if (navigator.share) await navigator.share({text});
-    else { await navigator.clipboard.writeText(text); el('share').textContent = 'Copied!'; }
-    track('share');
-  } catch (error) {
-    if (!(error instanceof DOMException && error.name==='AbortError')) {
-      el('rank').textContent = 'Sharing is unavailable here. Select and copy your result below.';
-      let area = document.getElementById('share-copy') as HTMLTextAreaElement | null;
-      if (!area) { area = document.createElement('textarea'); area.id = 'share-copy'; area.setAttribute('aria-label','Copy your Jumble result'); el('result').append(area); }
-      area.value = text; area.select();
-    }
-  }
+    const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=630;
+    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Image download is unavailable. Copy your result instead.');
+    ctx.fillStyle='#faf9f6';ctx.fillRect(0,0,1200,630);
+    const logo=new Image();logo.src='/assets/jumble-logo-v2.png';await logo.decode();ctx.drawImage(logo,40,12,360,189);
+    ctx.fillStyle='#17212e';ctx.font='bold 40px system-ui';ctx.fillText(`${save.words.length} words. All 15 letters.`,430,100);
+    ctx.font='24px system-ui';ctx.fillText(puzzle.id,430,145);
+    const reveal=el<HTMLInputElement>('reveal-words').checked;
+    save.words.forEach((word,row)=>{
+      const y=218+row*22;ctx.font='18px system-ui';
+      if(reveal){ctx.fillStyle='#17212e';ctx.fillText(word.toUpperCase(),60,y+16);}
+      else for(let i=0;i<word.length;i++){ctx.fillStyle='#a9d2ff';ctx.fillRect(60+i*24,y,18,18);}
+    });
+    ctx.fillStyle='#17212e';ctx.font='22px system-ui';ctx.fillText('Same letters. Different minds.',60,580);ctx.font='18px system-ui';ctx.fillText(challengeUrl(),60,612,1080);
+    const link=document.createElement('a');link.download=`jumble-${puzzle.id}${reveal?'-words':''}.png`;link.href=canvas.toDataURL('image/png');link.click();track('share');
+  } catch(error){el('share-status').textContent=error instanceof Error?error.message:'Image download failed. Copy your result instead.';}
+};
+function showHistory() {
+  const rows=readHistory(storage.get('jumble:history')),stats=summarizeHistory(rows,new Date().toISOString().slice(0,10));
+  el('history-summary').textContent=stats.completed?`${stats.completed} solved · ${stats.current} day streak · longest ${stats.longest} · ${stats.averageWords.toFixed(1)} average words · ${stats.minimumSolves} minimum solves recorded`:'No solves saved yet. Your first one starts here.';
+  el('history-list').replaceChildren(...rows.slice(-30).reverse().map(row=>{const li=document.createElement('li'),a=document.createElement('a');a.href=`/?day=${encodeURIComponent(row.day)}`;a.textContent=`${row.day} · ${row.words.length} words`;li.append(a);return li;}));
+  el<HTMLDialogElement>('history-dialog').showModal();
+}
+el('history').onclick=showHistory;el('result-history').onclick=showHistory;
+el('report-word').onclick=()=>{el<HTMLInputElement>('report-input').value=selected.map(i=>puzzle.letters[i]).join('').toLowerCase();el('report-status').textContent='';el<HTMLDialogElement>('report-dialog').showModal();};
+el<HTMLFormElement>('report-form').onsubmit=async event=>{
+  event.preventDefault();const button=el('report-form').querySelector<HTMLButtonElement>('button[type=submit]')!;button.disabled=true;
+  try {await api('report',{puzzleId:puzzle.id,dictionaryVersion:puzzle.dictionaryVersion,word:el<HTMLInputElement>('report-input').value,reason:el<HTMLTextAreaElement>('report-reason').value});el('report-status').textContent='Sent for review. Today’s word list stays the same.';}
+  catch(error){el('report-status').textContent=error instanceof Error?error.message:'Report could not send. Try again.';}
+  finally{button.disabled=false;}
 };
 const dark = storage.get('jumble:theme')==='dark' || (!storage.get('jumble:theme') && matchMedia('(prefers-color-scheme:dark)').matches);
 document.body.classList.toggle('dark',dark);
-function themeName() { el('theme').setAttribute('aria-label',document.body.classList.contains('dark')?'Use light theme':'Use dark theme'); }
+function themeName() {
+  const dark = document.body.classList.contains('dark');
+  el('theme').setAttribute('aria-label',dark?'Use light theme':'Use dark theme');
+  document.querySelectorAll<HTMLImageElement>('img[data-logo]').forEach(image => { image.src = `/assets/jumble-logo-v2${dark?'-dark':''}.png`; });
+}
 themeName();
 el('theme').onclick = () => { document.body.classList.toggle('dark'); storage.set('jumble:theme',document.body.classList.contains('dark')?'dark':'light'); themeName(); track('theme_toggle'); };
 el('help').onclick = () => el<HTMLDialogElement>('help-dialog').showModal();
@@ -199,7 +248,7 @@ el<HTMLFormElement>('sponsor-form').onsubmit = async event => {
   const button = form.querySelector<HTMLButtonElement>('button[type=submit]')!; button.disabled = true;
   try {
     const data = new FormData(form), mode = data.get('mode');
-    const payload = {name:data.get('name'),url:data.get('url'),mode,...(mode==='takeover'?{}:{amount:Number(data.get('amount'))*100})};
+    const payload = {name:data.get('name'),url:data.get('url'),mode,puzzleId:puzzle.id,returnTo:playing&&complete()?'result':'entry',...(mode==='takeover'?{}:{amount:Number(data.get('amount'))*100})};
     const fingerprint = JSON.stringify(payload);
     let pending: {fingerprint:string;submissionId:string}|null = null;
     try { pending = JSON.parse(storage.get('jumble:checkout')||'null'); } catch {}
@@ -252,6 +301,9 @@ async function boot() {
         // Do not restore session authority, ranking, minimum, time or arbitrary saved fields.
         save.words = restored.words; save.used = restored.used;
         if (indices(restored.order) && restored.order.length===15) save.order = restored.order;
+        if (Array.isArray(restored.bestWords) && restored.bestWords.length<=15
+          && restored.bestWords.every((word:unknown)=>typeof word==='string' && dictionary.has(word))
+          && restored.bestWords.join('').split('').sort().join('')===puzzle.letters.join('').toLowerCase().split('').sort().join('')) save.bestWords=restored.bestWords;
       }
     } catch {}
     el('day').textContent = puzzle.id; el('entry-status').textContent = '';
@@ -265,13 +317,13 @@ async function boot() {
       el('countdown').textContent = `Next Jumble in ${Math.floor((next-now)/3600000)}h ${Math.floor((next-now)%3600000/60000)}m · midnight UTC`;
       if (puzzle.id < new Date(now).toISOString().slice(0,10)) {
         el('today-link').hidden = false;
-        if (playing && !complete()) message('A new Jumble is available. Finish this puzzle, or go Back for today’s puzzle.');
+        if (playing && !complete()) message('A new Jumble is available. Finish this puzzle, or open today’s Jumble below.');
       }
     };
     updateCountdown(); setInterval(updateCountdown,60000);
     if (params.get('sponsor')==='thanks' || params.get('sponsor')==='cancelled') {
       storage.set('jumble:checkout','null');
-      playing = false; render(); el('sponsor-return').hidden = false;
+      playing = params.get('view')==='result' && complete(); render(); el('sponsor-return').hidden = false;
       el('sponsor-return').textContent = params.get('sponsor')==='thanks'?'Thanks. Your listing appears after payment confirmation.':'Checkout cancelled. You can try again whenever you like.';
     }
   } catch (error) {

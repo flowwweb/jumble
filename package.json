@@ -5,13 +5,13 @@
   "type": "module",
   "main": "functions/index.mjs",
   "scripts": {
-    "dev": "npm run build && npm run functions:manifest && node scripts/emulator-secrets.mjs && firebase emulators:start --only hosting,functions,firestore --project demo-jumble",
+    "dev": "npm run build && npm run functions:manifest && node scripts/emulator-secrets.mjs && npm run emulators",
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "check": "tsc --noEmit && node --check functions/index.mjs",
     "functions:manifest": "node scripts/functions-manifest.mjs",
     "test:http": "node scripts/smoke-http.mjs",
-    "emulators": "firebase emulators:start --only hosting,functions,firestore --project demo-jumble"
+    "emulators": "node scripts/emulators.mjs"
   },
   "engines": {
     "node": ">=22"
