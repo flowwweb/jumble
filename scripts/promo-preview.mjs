@@ -1,5 +1,6 @@
 // Isolated promo only: serves an existing build, never imports or contacts production services.
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, relative, extname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,15 +9,21 @@ export const DEMO = Object.freeze({ id: '2099-01-01', letters: [...'OTSHOERULDTO
 const words = ['outdoors', 'shelter'];
 const signature = value => [...value].sort().join('');
 
-export function createPromoServer(dist = fileURLToPath(new URL('../dist/', import.meta.url))) {
+export function createPromoServer(dist = fileURLToPath(new URL('../dist/', import.meta.url)), { productionDictionary = false } = {}) {
+  const version = productionDictionary ? JSON.parse(readFileSync(new URL('../data/dictionary/manifest.json', import.meta.url), 'utf8')).version : DEMO.dictionaryVersion;
+  const dictionaryBytes = productionDictionary ? readFileSync(new URL(`../public/data/words-${version}.json`, import.meta.url)) : Buffer.from(JSON.stringify({ version, words }));
+  const puzzle = { ...DEMO, dictionaryVersion: version };
   let started = 0;
   return createServer(async (req, res) => {
     const json = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
     try {
       const url = new URL(req.url, 'http://127.0.0.1');
       if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) return json(403, { error: 'Loopback demo only.' });
-      if (url.pathname === '/api/puzzle' && req.method === 'GET') return json(200, DEMO);
-      if (url.pathname === `/data/words-${DEMO.dictionaryVersion}.json` && req.method === 'GET') return json(200, { version: DEMO.dictionaryVersion, words });
+      if (url.pathname === '/api/puzzle' && req.method === 'GET') return json(200, puzzle);
+      if (url.pathname === `/data/words-${version}.json` && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(dictionaryBytes);
+      }
       if (url.pathname.startsWith('/api/')) {
         if (url.pathname === '/api/sponsors' && req.method === 'GET') return json(200, { rows: [], topCents: 0 });
         if (req.method !== 'POST') return json(405, { error: 'Method not allowed.' });
@@ -28,7 +35,7 @@ export function createPromoServer(dist = fileURLToPath(new URL('../dist/', impor
         if (input.puzzleId !== DEMO.id) return json(400, { error: 'Demo puzzle only.' });
         if (url.pathname === '/api/session') { started ||= Date.now(); return json(200, { sessionId: 'promo-memory-only' }); }
         if (url.pathname === '/api/result') {
-          if (!started || input.sessionId !== 'promo-memory-only' || input.dictionaryVersion !== DEMO.dictionaryVersion || !Array.isArray(input.words)
+          if (!started || input.sessionId !== 'promo-memory-only' || input.dictionaryVersion !== version || !Array.isArray(input.words)
             || input.words.length !== 2 || !input.words.every(word => words.includes(word))
             || signature(input.words.join('')) !== signature(DEMO.letters.join('').toLowerCase())) return json(400, { error: 'Invalid demo solve.' });
           return json(200, { puzzleId: DEMO.id, words: input.words, wordCount: 2, minimum: 2, elapsedMs: Date.now() - started, rank: 1, total: 1, tied: 1, rankingAsOf: Date.now(), demo: true });
@@ -50,6 +57,8 @@ export function createPromoServer(dist = fileURLToPath(new URL('../dist/', impor
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const server = createPromoServer();
-  server.listen(4179, '127.0.0.1', () => console.log('ISOLATED PROMO: http://127.0.0.1:4179/?day=2099-01-01 | OUTDOORS + SHELTER | no production writes'));
+  const productionDictionary = process.argv.includes('--production-dictionary');
+  const server = createPromoServer(undefined, { productionDictionary });
+  const port = productionDictionary ? 4180 : 4179;
+  server.listen(port, '127.0.0.1', () => console.log(`ISOLATED PROMO: http://127.0.0.1:${port}/?day=2099-01-01 | OUTDOORS + SHELTER | ${productionDictionary ? 'production' : 'demo'} dictionary | no production writes`));
 }

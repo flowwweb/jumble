@@ -216,7 +216,7 @@ el('download-result').onclick=async()=>{
     const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=630;
     const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Image download is unavailable. Copy your result instead.');
     ctx.fillStyle='#faf9f6';ctx.fillRect(0,0,1200,630);
-    const logo=new Image();logo.src='/assets/jumble-logo-v3.png';await logo.decode();ctx.drawImage(logo,40,12,360,360*logo.naturalHeight/logo.naturalWidth);
+    const logo=new Image();logo.src='/assets/jumble-logo-v3.webp';await logo.decode();ctx.drawImage(logo,40,12,360,360*logo.naturalHeight/logo.naturalWidth);
     ctx.fillStyle='#17212e';ctx.font='bold 40px system-ui';ctx.fillText(`${save.words.length} words. All 15 letters.`,430,100);
     ctx.font='24px system-ui';ctx.fillText(puzzle.id,430,145);
     const reveal=el<HTMLInputElement>('reveal-words').checked;
@@ -248,7 +248,7 @@ document.body.classList.toggle('dark',dark);
 function themeName() {
   const dark = document.body.classList.contains('dark');
   el('theme').setAttribute('aria-label',dark?'Use light theme':'Use dark theme');
-  document.querySelectorAll<HTMLImageElement>('img[data-logo]').forEach(image => { image.src = `/assets/jumble-logo-v3${dark?'-dark':''}.png`; });
+  document.querySelectorAll<HTMLImageElement>('img[data-logo]').forEach(image => { image.src = `/assets/jumble-logo-v3${dark?'-dark':''}.webp`; });
 }
 themeName();
 el('theme').onclick = () => { document.body.classList.toggle('dark'); storage.set('jumble:theme',document.body.classList.contains('dark')?'dark':'light'); themeName(); track('theme_toggle'); };
