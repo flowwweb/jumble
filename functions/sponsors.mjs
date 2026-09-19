@@ -120,6 +120,7 @@ export function createSponsorService({ db, stripe, origin, allowedReturnOrigins 
       };
       const session = await stripe.checkout.sessions.create({
         mode: 'payment', integration_identifier: submission.integrationIdentifier,
+        branding_settings: { display_name: 'Jumble' },
         line_items: [{ price_data: { currency: 'usd', unit_amount: submission.cents,
           product_data: { name: 'Jumble sponsorship', description: 'Your listing appears after payment confirmation. Sponsor rank can change.' } }, quantity: 1 }],
         metadata, payment_intent_data: { metadata },

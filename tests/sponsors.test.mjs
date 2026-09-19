@@ -87,6 +87,7 @@ test('empty board has no seeds; checkout redirects grant no credit and metadata 
   assert.equal((await service.list()).totalCents, 0);
   const params = calls[0].params;
   assert.equal(params.mode, 'payment');
+  assert.deepEqual(params.branding_settings, { display_name: 'Jumble' });
   assert.equal(params.metadata.project, 'jumble');
   assert.deepEqual(params.payment_intent_data.metadata, params.metadata);
   assert.equal(params.payment_method_types, undefined);
