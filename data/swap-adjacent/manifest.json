@@ -1,161 +1,230 @@
 {
-  "rulesVersion": "swap-adjacent-v2",
-  "dictionaryVersion": "swap-accepted-v3-0ddbc02adcc5",
-  "dictionaryWordsSha256": "0ddbc02adcc59f7a749f899c3610073f5c884b6997519558037df8bd72b07a57",
+  "rulesVersion": "swap-adjacent-v3",
+  "dictionaryVersion": "swap-accepted-v4-8bd88a6d2a71",
+  "dictionaryWordsSha256": "8bd88a6d2a714d8fa19469ff5f5d90faa82600a06f4964ce9d7be81976f81b26",
   "count": 730,
   "start": "2026-09-20",
   "end": "2028-09-18",
-  "corpusSha256": "d7f31fbe571fa5fb40d388a2f7ba2d43ba509995ddd08d66c5deec3cdb24e2e0",
-  "previousCorpusSha256": "9e2d86e6f9daf539cdb65d755eb4a29f34c024c5c9cb8c291e2dfd00107af0c2",
-  "retainedBoards": 707,
+  "corpusSha256": "108956edffb01810c18628cc598a04dab424c0a858926c98eed6367212a79966",
+  "previousCorpusSha256": "d7f31fbe571fa5fb40d388a2f7ba2d43ba509995ddd08d66c5deec3cdb24e2e0",
+  "retainedBoards": 702,
   "replacements": [
     {
-      "id": "2026-09-20",
-      "oldBoard": "OVICELOUSSMAGES",
-      "newBoard": "IPGARSUZZAHCEST"
+      "id": "2026-11-03",
+      "oldBoard": "SNWOLTALHYWOWEE",
+      "newBoard": "MTEAGICNLNSUINY"
     },
     {
-      "id": "2026-09-29",
-      "oldBoard": "CEHESGRSTSDUETS",
-      "newBoard": "RVNERHIUCEDAOSE"
+      "id": "2027-04-16",
+      "oldBoard": "ALATEPIALDWSNDY",
+      "newBoard": "FAOSRRSPETUPNYN"
     },
     {
-      "id": "2026-12-06",
-      "oldBoard": "UJCIEICGISGRANS",
-      "newBoard": "STIELCRRELFOUTA"
+      "id": "2027-04-20",
+      "oldBoard": "ISRNKDUNNYNSAIL",
+      "newBoard": "FAIETERRUHGLVTO"
     },
     {
-      "id": "2026-12-15",
-      "oldBoard": "SPORESHPERATNOE",
-      "newBoard": "ESHUFGOAPLIMRGE"
+      "id": "2027-05-08",
+      "oldBoard": "SOCLESAISEICHNG",
+      "newBoard": "IOLRTPCMONWHAAM"
     },
     {
-      "id": "2026-12-16",
-      "oldBoard": "RWESSCATERDESEN",
-      "newBoard": "OPAVLELSIEORART"
+      "id": "2027-08-07",
+      "oldBoard": "SNANWCRAKECHOLK",
+      "newBoard": "FOLOHLUNPEGRACR"
     },
     {
-      "id": "2027-01-04",
-      "oldBoard": "SHORNGOPITSRSAS",
-      "newBoard": "NAHGTMIIICPECEG"
+      "id": "2027-10-05",
+      "oldBoard": "MEDLAWOMTNAPIAN",
+      "newBoard": "STMNEOHAONSWAPE"
     },
     {
-      "id": "2027-02-02",
-      "oldBoard": "AMTLSMOPERWAUEE",
-      "newBoard": "HCORMSTSREHAACK"
+      "id": "2027-11-28",
+      "oldBoard": "LOGSTROUHDRIANT",
+      "newBoard": "RROAPGTNUYMOEET"
     },
     {
-      "id": "2027-02-16",
-      "oldBoard": "ZENNYSUBNASCREE",
-      "newBoard": "LBMOCMEALETUSIN"
+      "id": "2028-02-05",
+      "oldBoard": "IVDOEMPUELSAGRA",
+      "newBoard": "MUOCEAALSEPPEPR"
     },
     {
-      "id": "2027-02-18",
-      "oldBoard": "STINTAPACKSNALI",
-      "newBoard": "OSAUTLCOSRFTARF"
+      "id": "2028-02-08",
+      "oldBoard": "PUOSEHAINTARLYN",
+      "newBoard": "SPITRLHACERUTTK"
     },
     {
-      "id": "2027-05-14",
-      "oldBoard": "RIVESHEOTRWRIUE",
-      "newBoard": "SEBRAZATAMWETRE"
+      "id": "2028-02-16",
+      "oldBoard": "CNONITOARMHABEL",
+      "newBoard": "CCARNSHEAMBECEH"
     },
     {
-      "id": "2027-05-27",
-      "oldBoard": "BLECHPAUIPTAINT",
-      "newBoard": "PRITEEONENGMDAL"
+      "id": "2028-02-29",
+      "oldBoard": "PAESHHROCEIPOTL",
+      "newBoard": "RFOSTFDAESRLMSE"
     },
     {
-      "id": "2027-05-31",
-      "oldBoard": "HOERSTOBHTTAOLE",
-      "newBoard": "OHRSEPSEETWICEE"
+      "id": "2028-03-03",
+      "oldBoard": "VAOCESIONDLTEMN",
+      "newBoard": "PAPEHEARTRENMLO"
     },
     {
-      "id": "2027-06-04",
-      "oldBoard": "RAIOIPADREBCRPK",
-      "newBoard": "TSOORSPOYNSROPT"
-    },
-    {
-      "id": "2027-07-15",
-      "oldBoard": "COOEDTLWURPINOT",
-      "newBoard": "NTAILOULIPSHRSE"
-    },
-    {
-      "id": "2027-10-10",
-      "oldBoard": "SORESHCNPESTMAE",
-      "newBoard": "LEPPYPUMCNABOEH"
-    },
-    {
-      "id": "2027-10-15",
-      "oldBoard": "CEARLMHETDSHITS",
-      "newBoard": "POUESHEATNHSILL"
-    },
-    {
-      "id": "2027-12-17",
-      "oldBoard": "TETRAMELTARFESH",
-      "newBoard": "VTEIMSOAAEPCECH"
-    },
-    {
-      "id": "2027-12-19",
-      "oldBoard": "PLNAEMLLTPAPACE",
-      "newBoard": "CIOGTNRWINOVHCE"
-    },
-    {
-      "id": "2028-01-03",
-      "oldBoard": "APEPRPSOLRRIVET",
-      "newBoard": "SHAEKWNAFLKNEIE"
+      "id": "2028-03-04",
+      "oldBoard": "TRCEKSGAINTRAEN",
+      "newBoard": "JECNESNCEEUULIC"
     },
     {
       "id": "2028-03-10",
-      "oldBoard": "SEEHPWHEALIRANY",
-      "newBoard": "SNIEFSIMRMKTOLE"
+      "oldBoard": "SNIEFSIMRMKTOLE",
+      "newBoard": "PRASHSEURLBTEMA"
     },
     {
-      "id": "2028-05-19",
-      "oldBoard": "MSILRFLWOECROON",
-      "newBoard": "FAUOTPIIITORNNN"
+      "id": "2028-03-15",
+      "oldBoard": "PMOARSETDLHWEAT",
+      "newBoard": "GHAEEWRIPTUSNNY"
     },
     {
-      "id": "2028-06-04",
-      "oldBoard": "ROANSWOOATMUMSE",
-      "newBoard": "WGASSCHEELRLUOD"
+      "id": "2028-03-16",
+      "oldBoard": "GRPELSTEAEASNLI",
+      "newBoard": "WOAMECSNENOSTRM"
     },
     {
-      "id": "2028-06-15",
-      "oldBoard": "RICERDNVLEAAPPE",
-      "newBoard": "CUETTGAOFSKINSE"
+      "id": "2028-03-30",
+      "oldBoard": "WOALDLPRSESGACS",
+      "newBoard": "WAHLECACNWSROFR"
+    },
+    {
+      "id": "2028-03-31",
+      "oldBoard": "IUGARSSOLYPNOTW",
+      "newBoard": "GPESTEUANTIBCAH"
+    },
+    {
+      "id": "2028-05-02",
+      "oldBoard": "TSORECIEAORRDAM",
+      "newBoard": "OEWENSNNTYWIIDO"
+    },
+    {
+      "id": "2028-06-01",
+      "oldBoard": "DRENSLRAOTPAISD",
+      "newBoard": "DRRSSHCELAOONEY"
+    },
+    {
+      "id": "2028-06-06",
+      "oldBoard": "GOSLSSWALEHPONO",
+      "newBoard": "TSRGEONASEHOHEY"
+    },
+    {
+      "id": "2028-06-08",
+      "oldBoard": "WOOTATHTOHSTREE",
+      "newBoard": "OHLVEGIAEEWRELN"
+    },
+    {
+      "id": "2028-06-16",
+      "oldBoard": "METAMTSALLSAROD",
+      "newBoard": "MLOEVGOASLPEURE"
+    },
+    {
+      "id": "2028-07-29",
+      "oldBoard": "GRAEPTLSPIIUMLE",
+      "newBoard": "RGARSCHASYSONWI"
+    },
+    {
+      "id": "2028-08-03",
+      "oldBoard": "RPVNTICARESIENE",
+      "newBoard": "RWIMTLFRELCOAAE"
+    },
+    {
+      "id": "2028-08-15",
+      "oldBoard": "GFETSRUESHAPPEL",
+      "newBoard": "SCNEEFALELCHUTK"
+    },
+    {
+      "id": "2028-08-22",
+      "oldBoard": "WMAANGPOLSMARSE",
+      "newBoard": "IONIGCRCLAUJCIE"
+    },
+    {
+      "id": "2028-09-06",
+      "oldBoard": "GORUPSEHELCLTKA",
+      "newBoard": "OHAYERONHTLIGST"
     }
   ],
   "distribution": {
-    "3": 10,
-    "4": 214,
-    "5": 129,
-    "6": 377
+    "3": 19,
+    "4": 221,
+    "5": 159,
+    "6": 331
   },
   "initialStateLimit": 200000,
   "retryStateLimit": 1000000,
   "retriedIds": [
+    "2026-09-24",
     "2026-09-28",
-    "2026-12-09",
-    "2027-03-05",
-    "2027-04-12",
-    "2027-05-29",
-    "2027-06-12",
+    "2026-10-01",
+    "2026-10-16",
+    "2026-10-18",
+    "2026-10-23",
+    "2026-11-29",
+    "2026-12-16",
+    "2027-01-05",
+    "2027-02-03",
+    "2027-02-12",
+    "2027-02-16",
+    "2027-03-03",
+    "2027-03-07",
+    "2027-03-23",
+    "2027-04-03",
+    "2027-04-08",
+    "2027-05-04",
+    "2027-05-19",
+    "2027-05-23",
+    "2027-05-27",
+    "2027-05-30",
     "2027-06-22",
     "2027-06-29",
     "2027-07-01",
+    "2027-07-06",
+    "2027-07-11",
     "2027-07-22",
+    "2027-07-24",
     "2027-08-02",
+    "2027-08-03",
+    "2027-08-05",
+    "2027-08-11",
+    "2027-08-13",
+    "2027-08-14",
+    "2027-08-15",
+    "2027-08-21",
     "2027-08-25",
     "2027-09-02",
-    "2027-10-13",
+    "2027-09-09",
+    "2027-09-13",
+    "2027-10-12",
+    "2027-10-14",
     "2027-11-02",
+    "2027-11-04",
+    "2027-11-15",
+    "2027-11-23",
     "2027-11-24",
+    "2027-12-15",
+    "2028-02-05",
+    "2028-02-08",
+    "2028-02-16",
+    "2028-02-29",
+    "2028-03-03",
+    "2028-03-04",
+    "2028-03-10",
     "2028-03-15",
     "2028-03-16",
-    "2028-05-08",
-    "2028-05-13",
+    "2028-03-31",
+    "2028-05-02",
     "2028-06-01",
-    "2028-09-13"
+    "2028-06-16",
+    "2028-07-29",
+    "2028-08-03",
+    "2028-08-22",
+    "2028-09-06"
   ],
   "maxMillisecondsPerPuzzle": 10000,
   "maxRetryMilliseconds": 60000

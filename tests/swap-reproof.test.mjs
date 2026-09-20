@@ -12,7 +12,7 @@ test('dictionary reproof preserves identity, replaces proof binding, and reports
   const result = reproveSwapCorpus(source, vocabulary);
   assert.equal(result.status, 'PROVEN'); assert.equal(JSON.stringify(source), old);
   assert.deepEqual(result.puzzles[0].letters, source[0].letters); assert.equal(result.puzzles[0].id, source[0].id);
-  assert.equal(result.puzzles[0].optimality.minimumMoves, 5);
+  assert.equal(result.puzzles[0].optimality.minimumMoves, 3);
   assert.notEqual(result.puzzles[0].optimality.dictionaryWordsSha256, source[0].optimality.dictionaryWordsSha256);
   assert.ok(result.admissionConflicts.some(conflict => conflict.words?.includes('mages')));
   assert.equal(replaySwapSession(source[0].letters, result.puzzles[0].optimality.optimalActions, createSwapDictionary(vocabulary.words)).won, true);

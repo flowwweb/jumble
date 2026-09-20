@@ -37,9 +37,9 @@ test('malformed boards, actions and vocabulary are rejected', () => {
 });
 test('daily generation is deterministic, solvable, unique and never solved or one swap away', async () => {
   const words = JSON.parse(await readFile(new URL('../data/swap/familiar-v1.json', import.meta.url))).words;
-  const admitted = JSON.parse(await readFile(new URL('../data/swap/accepted-v3.json', import.meta.url))).words;
+  const admitted = JSON.parse(await readFile(new URL('../data/swap/accepted-v4.json', import.meta.url))).words;
   const lexicon = createSwapDictionary(admitted);
-  assert.equal(lexicon.words.length, 5160);
+  assert.equal(lexicon.words.length, 7039);
   assert.equal(evaluateBoard('CHEAPPETALGATES', lexicon).won, true);
   assert.equal(lexicon.has('slick'), true);
   assert.equal(evaluateBoard('SLICKPETALGATES', lexicon).won, true);

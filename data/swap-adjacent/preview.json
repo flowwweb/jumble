@@ -17,8 +17,8 @@
     "C",
     "E"
   ],
-  "dictionaryVersion": "swap-accepted-v3-0ddbc02adcc5",
-  "rulesVersion": "swap-adjacent-v2",
+  "dictionaryVersion": "swap-accepted-v4-8bd88a6d2a71",
+  "rulesVersion": "swap-adjacent-v3",
   "solutionWords": [
     "souls",
     "mages",
@@ -36,10 +36,10 @@
   ],
   "optimality": {
     "status": "PROVEN",
-    "rulesVersion": "swap-adjacent-v2",
-    "dictionaryVersion": "swap-accepted-v3-0ddbc02adcc5",
+    "rulesVersion": "swap-adjacent-v3",
+    "dictionaryVersion": "swap-accepted-v4-8bd88a6d2a71",
     "boardSha256": "35a57d7045198aaad95c1b0d5705faa3acea1cd18a82381cef0f871b66ffad09",
-    "dictionaryWordsSha256": "0ddbc02adcc59f7a749f899c3610073f5c884b6997519558037df8bd72b07a57",
+    "dictionaryWordsSha256": "8bd88a6d2a714d8fa19469ff5f5d90faa82600a06f4964ce9d7be81976f81b26",
     "minimumMoves": 2,
     "optimalActions": [
       {
@@ -60,8 +60,8 @@
     ],
     "proof": {
       "method": "multi-source-bidirectional-bfs-v1",
-      "goalCount": 900,
-      "discoveredStates": 1079,
+      "goalCount": 2832,
+      "discoveredStates": 3011,
       "expandedStates": 11,
       "completedRadii": [
         1,

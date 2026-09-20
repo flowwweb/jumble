@@ -28,7 +28,13 @@ test('isolated HTTP preview uses real SWAP replay, per-browser sessions, exact a
   }
   assert.equal(puzzle.board.join(''),'MOULSVAGESSOICE');
   const post=(route,input,identity=cookie)=>fetch(`${origin}/api/${route}`,{method:'POST',headers:{'Content-Type':'application/json',Origin:origin,Cookie:identity},body:JSON.stringify(input)});
-  const context={mode:'swap-adjacent-v2',puzzleId:puzzle.id,dictionaryVersion:puzzle.dictionaryVersion};
+  const context={mode:'swap-adjacent-v3',puzzleId:puzzle.id,dictionaryVersion:puzzle.dictionaryVersion};
+  const report={...context,word:'mouls',reason:'Preview-only review flow check'};
+  assert.deepEqual(await (await post('report',report)).json(),{received:true,status:'pending',duplicate:false});
+  assert.equal((await (await post('report',report)).json()).duplicate,true);
+  assert.equal((await (await post('report',{...report,word:'souls'})).json()).code,'WORD_ALREADY_ACCEPTED');
+  assert.equal((await (await post('report',{...report,word:'zzzzz'})).json()).code,'REPORT_WORD_NOT_IN_PUZZLE');
+  assert.equal(dictionary.has('mouls'),false);
   const session=await (await post('session',context)).json();
   assert.equal((await (await post('session',context)).json()).sessionId,session.sessionId);
   const actions=[[5,10],[0,5]]
@@ -41,12 +47,12 @@ test('isolated HTTP preview uses real SWAP replay, per-browser sessions, exact a
   assert.deepEqual(result.words,['souls','mages','voice']);assert.equal(result.optimal.moves,2);assert.deepEqual(result.optimal.actions,actions);assert.equal('optimal' in puzzle,false);assert.equal('optimality' in puzzle,false);
   assert.deepEqual(await (await post('result',input)).json(),result);
   assert.equal((await post('checkout',{})).status,403);
-  assert.equal((await post('event',{mode:'swap-adjacent-v2',name:'share'})).status,204);
+  assert.equal((await post('event',{mode:'swap-adjacent-v3',name:'share'})).status,204);
   const daily=await (await fetch(`${origin}/api/puzzle?day=2026-09-20`)).json();
   assert.equal(daily.preview,'daily-corpus-memory');
   assert.equal('solutionMoves' in daily,false);assert.equal('solutionWords' in daily,false);
   const corpus=JSON.parse(await readFile(new URL('../data/swap-adjacent/puzzles.json',import.meta.url),'utf8'));
-  const dayContext={mode:'swap-adjacent-v2',puzzleId:daily.id,dictionaryVersion:daily.dictionaryVersion};
+  const dayContext={mode:'swap-adjacent-v3',puzzleId:daily.id,dictionaryVersion:daily.dictionaryVersion};
   const daySession=await (await post('session',dayContext)).json();
   const solved=await post('result',{...dayContext,sessionId:daySession.sessionId,actions:corpus[0].solutionMoves.map(a=>({type:'swap',...a}))});
   assert.equal(solved.status,200);assert.equal((await solved.json()).moves,corpus[0].solutionMoves.length);
@@ -61,13 +67,20 @@ test('isolated HTTP preview uses real SWAP replay, per-browser sessions, exact a
 // The same licensed acceptance list drives browser, server and optimality proofs.
 test('SWAP vocabulary retains source-supported inflections and matches its approved source',async()=>{
   const read=path=>readFile(new URL(path,import.meta.url),'utf8');
-  const review=JSON.parse(await read('../data/swap/accepted-v3.json'));
-  const source=await read('../data/dictionary/words.json');
-  assert.equal(createHash('sha256').update(source).digest('hex'),review.dictionarySha256);
-  const expected=JSON.parse(source).filter(word=>/^[a-z]{5}$/.test(word)).sort();
+  const review=JSON.parse(await read('../data/swap/accepted-v4.json'));
+  const previous=JSON.parse(await read('../data/swap/accepted-v3.json'));
   const raw=await read('../data/swap/words.json'),words=JSON.parse(raw);
-  assert.deepEqual(words.words,expected);assert.deepEqual(words.words,review.words);
-  assert.equal(createHash('sha256').update(JSON.stringify(expected)).digest('hex'),review.wordsSha256);
-  assert.equal(words.version,`swap-accepted-v3-${review.wordsSha256.slice(0,12)}`);
+  assert.equal(review.status,'APPROVED_FOR_ROW_VALIDATION_NOT_GENERATOR_SEEDS');
+  assert.equal(words.words.length,7039);
+  assert.deepEqual(words.words,review.words);
+  assert.deepEqual(words.words,[...new Set(words.words)].sort());
+  assert.equal(words.words.every(word=>/^[a-z]{5}$/.test(word)),true);
+  assert.equal(previous.words.every(word=>words.words.includes(word)),true);
+  assert.equal(createHash('sha256').update(JSON.stringify(words.words)).digest('hex'),review.wordsSha256);
+  assert.equal(words.version,`swap-accepted-v4-${review.wordsSha256.slice(0,12)}`);
+  assert.equal(words.source.commit,review.sourceCommit);
+  assert.equal(words.source.exportSha256,review.sourceExportSha256);
+  assert.equal(words.copyright,review.copyright);
+  assert.equal(createHash('sha256').update(words.copyright).digest('hex'),review.copyrightSha256);
   assert.equal(await read(`../public/data/swap-words-${words.version}.json`),raw);
 });

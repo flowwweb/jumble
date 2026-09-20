@@ -35,9 +35,9 @@ export function createSwapPreviewServer({dist=fileURLToPath(new URL('../dist/',i
   const sample = readJson('../data/swap-adjacent/preview.json');
   const clock = () => Math.max(now(),Date.parse('2026-09-20T12:00:00Z'));
   const db = memoryDb(), identities = new Set(), events = new Map();
-  const daily = createGameService({db,now:clock,mode:'swap-adjacent-v2',dictionary:createSwapDictionary(vocabulary.words),
+  const daily = createGameService({db,now:clock,mode:'swap-adjacent-v3',dictionary:createSwapDictionary(vocabulary.words),
     dictionaryVersion:vocabulary.version,puzzles:corpus.map(p=>({...p,board:p.letters}))});
-  const fixture = createGameService({db,now:()=>Math.max(clock(),Date.parse(`${FIXTURE_DAY}T12:00:00Z`)),mode:'swap-adjacent-v2',
+  const fixture = createGameService({db,now:()=>Math.max(clock(),Date.parse(`${FIXTURE_DAY}T12:00:00Z`)),mode:'swap-adjacent-v3',
     dictionary:createSwapDictionary(vocabulary.words),dictionaryVersion:vocabulary.version,
     puzzles:[{...sample,id:FIXTURE_DAY,board:sample.letters}]});
   const server = createServer(async(req,res)=>{
@@ -67,7 +67,7 @@ export function createSwapPreviewServer({dist=fileURLToPath(new URL('../dist/',i
         if(route==='session')return json(200,await game.startSession(uid,input));
         if(route==='result')return json(200,{...await game.submitResult(uid,input),preview:true});
         if(route==='report')return json(200,await game.reportWord(uid,input));
-        if(route==='event'&&input.mode==='swap-adjacent-v2'&&allowedEvents.has(input.name)){events.set(input.name,(events.get(input.name)||0)+1);res.writeHead(204);return res.end();}
+        if(route==='event'&&input.mode==='swap-adjacent-v3'&&allowedEvents.has(input.name)){events.set(input.name,(events.get(input.name)||0)+1);res.writeHead(204);return res.end();}
         return json(400,{error:'Unsupported preview request.'});
       }
       if(!['GET','HEAD'].includes(req.method))return json(405,{error:'Method not allowed.'});
@@ -78,7 +78,7 @@ export function createSwapPreviewServer({dist=fileURLToPath(new URL('../dist/',i
       const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.ico':'image/x-icon','.txt':'text/plain'};
       res.writeHead(200,{'Content-Type':types[extname(path)]||'application/octet-stream','Cache-Control':'no-store','X-Jumble-Preview':'isolated-memory'});
       res.end(req.method==='HEAD'?undefined:await readFile(path));
-    }catch(error){json(error instanceof GameError?error.status:error instanceof SyntaxError?400:404,{error:error instanceof GameError?error.code:'Preview request unavailable.'});}
+    }catch(error){json(error instanceof GameError?error.status:error instanceof SyntaxError?400:404,{error:error instanceof GameError?error.code:'Preview request unavailable.',...(error instanceof GameError?{code:error.code}:{})});}
   });
   return server;
 }
