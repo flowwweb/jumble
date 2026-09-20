@@ -1,4 +1,4 @@
-export const SWAP_RULES_VERSION: 'swap-v1';
+export const SWAP_RULES_VERSION: 'swap-adjacent-v1';
 export type SwapAction = { from: number; to: number };
 export type SwapSessionAction = ({ type: 'swap' } & SwapAction) | { type: 'undo' } | { type: 'reset' };
 export type SwapDictionary = { has(word: string): boolean };

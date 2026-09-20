@@ -10,7 +10,7 @@ test('all legal swaps preserve tiles, reverse themselves, and never mutate input
   const board = normalizeBoard(solved);
   for (let from = 0; from < 15; from++) for (let to = 0; to < 15; to++) {
     const action = { from, to };
-    if (from !== to && board[from] !== board[to] && (Math.floor(from / 5) === Math.floor(to / 5) || from % 5 === to % 5)) {
+    if (from !== to && board[from] !== board[to] && (Math.abs(Math.floor(from / 5) - Math.floor(to / 5)) + Math.abs(from % 5 - to % 5) === 1)) {
       const next = applySwap(board, action);
       assert.deepEqual([...next].sort(), [...board].sort());
       assert.deepEqual(applySwap(next, action), board);
@@ -27,7 +27,7 @@ test('any three distinct vocabulary rows win; valid rows remain movable', () => 
   assert.deepEqual(evaluateBoard('APPLEBREADAPPLE', dictionary).validRows, [false, true, false]);
   assert.deepEqual(evaluateBoard('APPLEAPPLEAPPLE', dictionary).validRows, [false, false, false]);
   assert.equal(evaluateBoard('APPLEBEACHZZZZZ', dictionary).won, false);
-  assert.notDeepEqual(applySwap(solved, { from: 0, to: 4 }), normalizeBoard(solved));
+  assert.notDeepEqual(applySwap(solved, { from: 0, to: 1 }), normalizeBoard(solved));
 });
 test('malformed boards, actions and vocabulary are rejected', () => {
   for (const board of [null, [], new Array(15), 'TOOSHORT', 'APPLEBEACHBREA1']) assert.throws(() => normalizeBoard(board), TypeError);
@@ -44,8 +44,8 @@ test('daily generation is deterministic, solvable, unique and never solved or on
   assert.equal(lexicon.has('slick'), true);
   assert.equal(evaluateBoard('SLICKPETALGATES', lexicon).won, true);
   assert.equal(words.includes('cheap'), false);
-  const alternate = applySwap('CHEAPPETALGATES', { from: 0, to: 4 });
-  assert.equal(replaySwapSession(alternate, [{ type: 'swap', from: 0, to: 4 }], lexicon).won, true);
+  const alternate = applySwap('CHEAPPETALGATES', { from: 0, to: 1 });
+  assert.equal(replaySwapSession(alternate, [{ type: 'swap', from: 0, to: 1 }], lexicon).won, true);
   const puzzles = generateSwapPuzzles(words, admitted, 'test', 730);
   assert.deepEqual(generateSwapPuzzles(words, admitted, 'test', 730), puzzles);
   assert.equal(new Set(puzzles.map(p => p.letters.join(''))).size, 730);
@@ -57,16 +57,16 @@ test('daily generation is deterministic, solvable, unique and never solved or on
     assert.ok(evaluateBoard(p.letters, lexicon).rows.every(word => !lexicon.has(word)));
     assert.equal(evaluateBoard(replaySwaps(p.letters, p.solutionMoves), lexicon).won, true);
     assert.equal(replaySwapSession(p.letters, p.solutionMoves.map(action => ({ type: 'swap', ...action })), lexicon).won, true);
-    for (let from = 0; from < 15; from++) for (let to = from + 1; to < 15; to++) if (p.letters[from] !== p.letters[to] && (Math.floor(from / 5) === Math.floor(to / 5) || from % 5 === to % 5)) assert.equal(evaluateBoard(applySwap(p.letters, { from, to }), lexicon).won, false);
+    for (let from = 0; from < 15; from++) for (let to = from + 1; to < 15; to++) if (p.letters[from] !== p.letters[to] && (Math.abs(Math.floor(from / 5) - Math.floor(to / 5)) + Math.abs(from % 5 - to % 5) === 1)) assert.equal(evaluateBoard(applySwap(p.letters, { from, to }), lexicon).won, false);
   }
 });
 
 test('session undo/reset preserve forward score; invalid swaps are no-ops; terminal locks', () => {
-  const initial = applySwap(solved, { from: 0, to: 4 });
-  const forward = { type: 'swap', from: 5, to: 9 };
-  const result = replaySwapSession(initial, [forward, { type: 'undo' }, forward, { type: 'reset' }, { type: 'swap', from: 0, to: 6 }, { type: 'swap', from: 1, to: 2 }], dictionary);
+  const initial = applySwap(solved, { from: 0, to: 1 });
+  const forward = { type: 'swap', from: 5, to: 6 };
+  const result = replaySwapSession(initial, [forward, { type: 'undo' }, forward, { type: 'reset' }, { type: 'swap', from: 0, to: 6 }, { type: 'swap', from: 0, to: 2 }], dictionary);
   assert.deepEqual(result.board, initial); assert.equal(result.moves, 2); assert.equal(result.undoDepth, 0);
-  const win = { type: 'swap', from: 0, to: 4 };
+  const win = { type: 'swap', from: 0, to: 1 };
   assert.equal(replaySwapSession(initial, [win], dictionary).won, true);
   assert.throws(() => replaySwapSession(initial, [win, { type: 'undo' }], dictionary), TypeError);
   assert.throws(() => replaySwapSession(initial, new Array(1001), dictionary), TypeError);

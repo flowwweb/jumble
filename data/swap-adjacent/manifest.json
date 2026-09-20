@@ -1,0 +1,27 @@
+{
+  "rulesVersion": "swap-adjacent-v1",
+  "dictionaryVersion": "swap-common-v2-6914181dbe64",
+  "dictionaryWordsSha256": "6914181dbe640e7757fa803b5bcd6b2498f56cf89bbdddd72d54dcba2596c708",
+  "seed": 20260920,
+  "start": "2026-09-20",
+  "count": 730,
+  "requestedCount": 730,
+  "scrambleLength": 6,
+  "minimumAdmission": 4,
+  "maxStatesPerProposal": 200000,
+  "maxMillisecondsPerProposal": 10000,
+  "maxTotalMilliseconds": 90000,
+  "proposals": 752,
+  "rejections": {
+    "unverified": 0,
+    "tooEasy": 22,
+    "duplicate": 0
+  },
+  "distribution": {
+    "4": 212,
+    "5": 96,
+    "6": 422
+  },
+  "corpusSha256": "9e2d86e6f9daf539cdb65d755eb4a29f34c024c5c9cb8c291e2dfd00107af0c2",
+  "admission": "Zero dictionary rows initially; no one-swap win; strict legal scramble witness; globally minimal solution proven across every admitted distinct-word triple and row order."
+}

@@ -1,0 +1,73 @@
+{
+  "id": "2099-01-01",
+  "letters": [
+    "S",
+    "R",
+    "A",
+    "N",
+    "E",
+    "B",
+    "L",
+    "A",
+    "T",
+    "E",
+    "C",
+    "R",
+    "I",
+    "C",
+    "K"
+  ],
+  "dictionaryVersion": "swap-common-v2-6914181dbe64",
+  "rulesVersion": "swap-adjacent-v1",
+  "solutionWords": [
+    "crane",
+    "slate",
+    "brick"
+  ],
+  "solutionMoves": [
+    {
+      "from": 5,
+      "to": 10
+    },
+    {
+      "from": 0,
+      "to": 5
+    }
+  ],
+  "optimality": {
+    "status": "PROVEN",
+    "rulesVersion": "swap-adjacent-v1",
+    "dictionaryVersion": "swap-common-v2-6914181dbe64",
+    "boardSha256": "acc72df8640d65055c42921b4281cfc7fdc8c8afbe3e5bee6654c0fcf5f6e70e",
+    "dictionaryWordsSha256": "6914181dbe640e7757fa803b5bcd6b2498f56cf89bbdddd72d54dcba2596c708",
+    "minimumMoves": 2,
+    "optimalActions": [
+      {
+        "type": "swap",
+        "from": 5,
+        "to": 10
+      },
+      {
+        "type": "swap",
+        "from": 0,
+        "to": 5
+      }
+    ],
+    "optimalWords": [
+      "crane",
+      "slate",
+      "brick"
+    ],
+    "proof": {
+      "method": "multi-source-bidirectional-bfs-v1",
+      "goalCount": 516,
+      "discoveredStates": 674,
+      "expandedStates": 10,
+      "completedRadii": [
+        1,
+        0
+      ],
+      "exhaustiveBelow": 2
+    }
+  }
+}

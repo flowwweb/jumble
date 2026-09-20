@@ -10,6 +10,7 @@ functions/data/
 .DS_Store
 data/puzzles.json
 data/swap/puzzles.json
+data/swap-adjacent/puzzles.json
 data/dictionary/upstream/
 .cache/
 .secret.local

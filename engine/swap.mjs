@@ -1,4 +1,4 @@
-export const SWAP_RULES_VERSION = 'swap-v1';
+export const SWAP_RULES_VERSION = 'swap-adjacent-v1';
 
 export function normalizeBoard(input) {
   const board = typeof input === 'string' ? [...input] : input;
@@ -12,14 +12,14 @@ export function createSwapDictionary(words) {
   return Object.freeze({ words: Object.freeze([...accepted].sort()), has: word => typeof word === 'string' && accepted.has(word.toLowerCase()) });
 }
 
-/** Swap distinct tiles in one row or column, at any distance. */
+/** Swap distinct orthogonally adjacent tiles, without wrapping. */
 export function applySwap(input, action) {
   const board = normalizeBoard(input);
   if (!action || typeof action !== 'object' || Array.isArray(action)
     || !Number.isInteger(action.from) || !Number.isInteger(action.to)
     || action.from < 0 || action.from >= 15 || action.to < 0 || action.to >= 15
     || action.from === action.to || board[action.from] === board[action.to]
-    || (Math.floor(action.from / 5) !== Math.floor(action.to / 5) && action.from % 5 !== action.to % 5)) throw new TypeError('Invalid swap action.');
+    || (Math.abs(Math.floor(action.from / 5) - Math.floor(action.to / 5)) + Math.abs(action.from % 5 - action.to % 5) !== 1)) throw new TypeError('Invalid swap action.');
   [board[action.from], board[action.to]] = [board[action.to], board[action.from]];
   return board;
 }

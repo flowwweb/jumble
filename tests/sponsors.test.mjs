@@ -66,12 +66,12 @@ function fixture(gameMode) {
 }
 
 test('SWAP checkout mode is validated, retained on both returns and cannot alter a retried intent', async () => {
-  const {service,calls} = fixture('swap-v1');
-  const request = input({gameMode:'swap-v1',puzzleId:'2026-09-18',returnTo:'result'});
+  const {service,calls} = fixture('swap-adjacent-v1');
+  const request = input({gameMode:'swap-adjacent-v1',puzzleId:'2026-09-18',returnTo:'result'});
   await service.checkout(uid,request);
   for (const field of ['success_url','cancel_url']) {
     const url = new URL(calls[0].params[field]);
-    assert.equal(url.searchParams.get('mode'),'swap-v1');
+    assert.equal(url.searchParams.get('mode'),'swap-adjacent-v1');
     assert.equal(url.searchParams.get('day'),'2026-09-18');
     assert.equal(url.searchParams.get('view'),'result');
   }

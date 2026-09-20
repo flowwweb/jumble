@@ -71,7 +71,7 @@ export function createSponsorService({ db, stripe, origin, allowedReturnOrigins 
     async checkout(uid, input, requestOrigin = site.origin) {
       if (!returnOrigins.has(requestOrigin)) fail('INVALID_RETURN_ORIGIN', 403);
       const payload = parseSubmission(uid, input);
-      if (input.gameMode !== undefined && input.gameMode !== 'swap-v1') fail('INVALID_RETURN_CONTEXT');
+      if (input.gameMode !== undefined && input.gameMode !== 'swap-adjacent-v1') fail('INVALID_RETURN_CONTEXT');
       if (input.gameMode !== undefined) payload.gameMode = input.gameMode;
       if (input.returnTo !== undefined && !['entry', 'result'].includes(input.returnTo)) fail('INVALID_RETURN_CONTEXT');
       if (input.puzzleId !== undefined) {
