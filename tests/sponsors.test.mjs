@@ -36,7 +36,7 @@ function fakeDb() {
 const uid = 'anonymous-player-one';
 const input = (changes = {}) => ({ name: 'Example', url: 'https://example.com', amount: 100,
   submissionId: 'submission-one-12345', ...changes });
-function fixture() {
+function fixture(gameMode) {
   const db = fakeDb();
   let time = Date.parse('2026-09-19T10:00:00Z');
   let next = 0;
@@ -60,10 +60,25 @@ function fixture() {
     disputes: { retrieve: async id => structuredClone(disputes.get(id)) },
   };
   const service = createSponsorService({ db, stripe, origin: 'https://jumbbble.web.app', allowedReturnOrigins: ['https://jumbbble.web.app', 'https://jumble.flowwweb.com'], livemode: false, now: () => time,
-    getPuzzle: day => { if (!['2026-09-18', '2026-09-19'].includes(day)) throw new Error('PUZZLE_NOT_AVAILABLE'); return { id: day }; } });
+    getPuzzle: day => { if (!['2026-09-18', '2026-09-19'].includes(day)) throw new Error('PUZZLE_NOT_AVAILABLE'); return { id: day, mode: gameMode }; } });
   const event = (id = 'ch_1', type = 'charge.succeeded') => ({ type, livemode: false, data: { object: { id } } });
   return { db, stripe, service, calls, charges, disputes, event, advance: ms => { time += ms; } };
 }
+
+test('SWAP checkout mode is validated, retained on both returns and cannot alter a retried intent', async () => {
+  const {service,calls} = fixture('swap-v1');
+  const request = input({gameMode:'swap-v1',puzzleId:'2026-09-18',returnTo:'result'});
+  await service.checkout(uid,request);
+  for (const field of ['success_url','cancel_url']) {
+    const url = new URL(calls[0].params[field]);
+    assert.equal(url.searchParams.get('mode'),'swap-v1');
+    assert.equal(url.searchParams.get('day'),'2026-09-18');
+    assert.equal(url.searchParams.get('view'),'result');
+  }
+  for (const gameMode of [undefined,'shift-v1','https://evil.com']) await assert.rejects(service.checkout(uid,{...request,gameMode}));
+  assert.equal(calls.length,1);
+  assert.equal((await service.list()).total,0);
+});
 
 test('exact join/takeover economics, cumulative credit, whole dollars and cap', () => {
   assert.equal(checkoutCents('join', 10000, 0), 100);

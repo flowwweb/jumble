@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readHistory,summarizeHistory,resultShare} from '../src/results.ts';
+import {readHistory,summarizeHistory,resultShare,todayLinkVisible} from '../src/results.ts';
+test('open daily board becomes historical at UTC midnight without changing its identity',()=>{
+  const day='2026-09-20';
+  assert.equal(todayLinkVisible(day,Date.parse('2026-09-20T23:59:59.999Z')),false);
+  assert.equal(todayLinkVisible(day,Date.parse('2026-09-21T00:00:00.000Z')),true);
+  assert.equal(todayLinkVisible(day,Date.parse('2026-09-21T07:00:00+07:00')),true);
+  assert.equal(day,'2026-09-20');
+});
 test('local history rejects corrupt data and keeps one best result per day',()=>{
   const rows=readHistory(JSON.stringify([
     {day:'2026-09-18',words:['apple','table','chair']},

@@ -71,12 +71,15 @@ export function createSponsorService({ db, stripe, origin, allowedReturnOrigins 
     async checkout(uid, input, requestOrigin = site.origin) {
       if (!returnOrigins.has(requestOrigin)) fail('INVALID_RETURN_ORIGIN', 403);
       const payload = parseSubmission(uid, input);
+      if (input.gameMode !== undefined && input.gameMode !== 'swap-v1') fail('INVALID_RETURN_CONTEXT');
+      if (input.gameMode !== undefined) payload.gameMode = input.gameMode;
       if (input.returnTo !== undefined && !['entry', 'result'].includes(input.returnTo)) fail('INVALID_RETURN_CONTEXT');
       if (input.puzzleId !== undefined) {
         if (typeof input.puzzleId !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.puzzleId)) fail('INVALID_RETURN_CONTEXT');
         if (typeof getPuzzle !== 'function') fail('RETURN_CONTEXT_UNAVAILABLE', 503);
         // The game authority rejects invalid dates, unpublished puzzles, and future days.
         const puzzle = getPuzzle(input.puzzleId);
+        if (puzzle.mode !== input.gameMode) fail('INVALID_RETURN_CONTEXT');
         payload.puzzleId = puzzle.id;
         payload.returnTo = input.returnTo ?? 'entry';
       } else if (input.returnTo === 'result') fail('INVALID_RETURN_CONTEXT');
@@ -112,6 +115,7 @@ export function createSponsorService({ db, stripe, origin, allowedReturnOrigins 
         if (!returnOrigins.has(returnOrigin)) fail('INVALID_RETURN_ORIGIN', 403);
         const url = new URL('/', returnOrigin);
         url.searchParams.set('sponsor', status);
+        if (submission.gameMode) url.searchParams.set('mode', submission.gameMode);
         if (submission.puzzleId) {
           url.searchParams.set('day', submission.puzzleId);
           url.searchParams.set('view', submission.returnTo);

@@ -1,260 +1,42 @@
-import { readHistory, summarizeHistory, resultShare } from './results.js';
-type Puzzle = { id: string; letters: string[]; dictionaryVersion: string };
-type Result = { puzzleId: string; words: string[]; wordCount: number; minimum: number; elapsedMs: number; rank: number; total: number; tied: number; rankingAsOf: number };
-type Save = { version: 1; puzzleId: string; dictionaryVersion: string; words: string[]; used: number[]; order: number[]; bestWords?: string[]; sessionId?: string; result?: Result };
-const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const message = (text: string) => { el('message').textContent = text; };
-const storage = {
-  get(key: string) { try { return localStorage.getItem(key); } catch { return null; } },
-  set(key: string, value: string) { try { localStorage.setItem(key, value); } catch { message('Storage is unavailable. Keep this tab open to save your progress.'); } },
-};
-async function api<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/${path}`, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
-  if (response.status === 204) return undefined as T;
-  if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Jumble could not connect. Please try again.');
-  const data = await response.json();
-  if (!response.ok) throw Object.assign(new Error(data.error || 'Could not connect. Please try again.'), {code:data.code});
-  return data as T;
-}
-const track = (name: string) => { void api('event', { name }).catch(() => {}); };
-let puzzle: Puzzle, save: Save, dictionary: Set<string>;
-let selected: number[] = [], playing = false, submitting = false, sessionReady = false;
-let sessionRequest: Promise<void> | undefined;
-const colors: Record<string, string> = { A:'#FFB7BC',B:'#AADEB7',C:'#A9D2FF',D:'#FFE099',E:'#D7BFFF',F:'#BAC4FF',G:'#AADEB7',H:'#FFB7BC',I:'#FFE099',J:'#A9D2FF',K:'#D7BFFF',L:'#BAC4FF',M:'#FFE099',N:'#D7BFFF',O:'#FFB7BC',P:'#A9D2FF',Q:'#BAC4FF',R:'#A9D2FF',S:'#AADEB7',T:'#FFE099',U:'#FFB7BC',V:'#D7BFFF',W:'#A9D2FF',X:'#BAC4FF',Y:'#FFE099',Z:'#AADEB7' };
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-function animate(element: Element | null, frames: Keyframe[], duration = 220) {
-  if (!element || reducedMotion.matches) return;
-  element.getAnimations().forEach(animation => animation.cancel());
-  element.animate(frames, { duration, easing: 'cubic-bezier(.2,.8,.2,1)' });
-}
-function celebrate() {
-  if (reducedMotion.matches) return;
-  document.querySelector('.celebration')?.remove();
-  const layer = document.createElement('div'); layer.className = 'celebration'; layer.setAttribute('aria-hidden','true');
-  document.body.append(layer);
-  const palette = Object.values(colors).slice(0,6);
-  for (let i=0;i<42;i++) {
-    const spark = i>=26, particle = document.createElement('i');
-    particle.className = spark ? 'spark' : 'confetti';
-    const side = i<34?0:1, angle = ((i-26)%8)*Math.PI/4;
-    particle.style.background = palette[i%palette.length];
-    particle.style.left = `${spark ? (side?76:24) : 12+Math.random()*76}%`;
-    particle.style.top = spark ? '28%' : '-12px';
-    layer.append(particle);
-    const x = spark ? Math.cos(angle)*65 : (Math.random()-.5)*120;
-    const y = spark ? Math.sin(angle)*65 : Math.min(innerHeight*.7,520);
-    const animation = particle.animate([
-      {transform:'translate(0,0) rotate(0deg)',opacity:0},
-      {opacity:1,offset:.12},
-      {transform:`translate(${x}px,${y}px) rotate(${spark?0:360}deg)`,opacity:0}
-    ],{duration:spark?600:1250,delay:spark?180+side*160:Math.random()*160,easing:'cubic-bezier(.15,.6,.4,1)'});
-    animation.onfinish = () => { particle.remove(); if (!layer.childElementCount) layer.remove(); };
-  }
-}
-reducedMotion.addEventListener('change',()=>{
-  if (reducedMotion.matches) { document.getAnimations().forEach(animation=>animation.cancel()); document.querySelector('.celebration')?.remove(); }
-});
-const complete = () => save.used.length === 15;
-function persist() { storage.set(`jumble:${puzzle.id}`, JSON.stringify(save)); }
-function ensureSession() {
-  if (sessionReady) return Promise.resolve();
-  if (!sessionRequest) sessionRequest = api<{sessionId:string}>('session', {puzzleId:puzzle.id}).then(data => {
-    save.sessionId = data.sessionId; sessionReady = true; persist();
-  }).finally(() => { sessionRequest = undefined; });
-  return sessionRequest;
-}
-function focusTile(index?: number) {
-  const tile = index === undefined ? el('tiles').querySelector<HTMLButtonElement>('button:not(:disabled)') : el<HTMLButtonElement>(`tile-${index}`);
-  tile?.focus({ preventScroll: true });
-}
-function toggleTile(index: number) {
-  if (!playing || complete() || save.used.includes(index)) return;
-  selected = selected.includes(index) ? selected.filter(i => i !== index) : [...selected, index];
-  void ensureSession().catch(error => message(error.message));
-  render();
-  animate(el(`tile-${index}`),[{scale:'.94'},{scale:'1'}],160);
-  message(selected.length ? selected.map(i => puzzle.letters[i]).join('') : '');
-}
-function render() {
-  const focused = document.activeElement instanceof HTMLElement ? document.activeElement.id : '';
-  const board = el('tiles'); board.replaceChildren();
-  save.order.forEach(index => {
-    const letter = puzzle.letters[index];
-    const used = save.used.includes(index), chosen = selected.includes(index);
-    const button = document.createElement('button');
-    button.id = `tile-${index}`;
-    button.className = `tile${chosen ? ' selected' : ''}${used ? ' used' : ''}`;
-    button.textContent = letter; button.style.backgroundColor = colors[letter];
-    button.disabled = used || complete();
-    button.setAttribute('aria-label', `${letter}, tile ${index+1} of 15${used ? ', used' : chosen ? ', selected' : ', available'}`);
-    button.setAttribute('aria-pressed', String(chosen));
-    button.onclick = () => toggleTile(index);
-    board.append(button);
-  });
-  const composed = el('word'); composed.replaceChildren();
-  selected.forEach(index => {
-    const button = document.createElement('button');
-    button.id = `selected-${index}`; button.textContent = puzzle.letters[index];
-    button.setAttribute('aria-label', `Remove ${puzzle.letters[index]}, tile ${index+1}, from word`);
-    button.onclick = () => { toggleTile(index); focusTile(index); };
-    composed.append(button);
-  });
-  el<HTMLButtonElement>('confirm').disabled = !selected.length || complete();
-  el<HTMLButtonElement>('backspace').disabled = !selected.length || complete();
-  el<HTMLButtonElement>('reset').disabled = complete() || (!save.used.length && !selected.length);
-  el<HTMLButtonElement>('shuffle').disabled = complete();
-  el('remaining').textContent = `${15-save.used.length} left`;
-  el('words').replaceChildren(...wordItems(save.words));
-  el('entry').hidden = playing;
-  el('play').textContent = complete()?'View result':save.used.length?'Continue':'Play';
-  el('play-header').hidden = !playing;
-  el('game').hidden = !playing || complete();
-  el('result').hidden = !playing || !complete();
-  el('view-best').hidden = !save.bestWords || complete();
-  el('report-word').hidden = true;
-  if (complete()) showResult();
-  if (focused && document.getElementById(focused) instanceof HTMLButtonElement) {
-    const target = el<HTMLButtonElement>(focused);
-    if (!target.disabled && !target.closest('[hidden]')) target.focus({ preventScroll: true });
-  }
-}
-function wordItems(words: string[]) {
-  return words.map(word => { const li = document.createElement('li'); li.textContent = word.toUpperCase(); return li; });
-}
-function streak() {
-  const rows = readHistory(storage.get('jumble:history'));
-  const old = rows.find(row=>row.day===puzzle.id);
-  if (!old || save.words.length<=old.words.length) {
-    storage.set('jumble:history',JSON.stringify([...rows.filter(row=>row.day!==puzzle.id),{day:puzzle.id,words:save.words,minimum:save.result?.minimum??old?.minimum}]));
-  }
-  if (!save.bestWords || save.words.length<save.bestWords.length) { save.bestWords=[...save.words]; persist(); }
-  const count = summarizeHistory(readHistory(storage.get('jumble:history')),new Date().toISOString().slice(0,10)).current;
-  el('streak').textContent = count ? `${count} day${count===1?'':'s'} in a row on this device` : '';
-}
-function showResult() {
-  el<HTMLButtonElement>('replay').disabled=submitting;
-  el('replay').textContent = save.result ? (save.words.length===save.result.minimum ? 'Try another way' : 'Try fewer words') : 'Replay';
-  el('result-title').textContent = `${save.words.length} word${save.words.length===1?'':'s'}. All 15 letters.`;
-  el('result-words').replaceChildren(...wordItems(save.words));
-  el('result-detail').textContent = save.result ? (save.words.length===save.result.minimum ? 'You found the minimum.' : `The fewest possible: ${save.result.minimum}.`) : 'Solved on this device. Online result not yet verified.';
-  el('result-time').textContent = save.result ? `${Math.floor(save.result.elapsedMs/60000)}m ${Math.floor(save.result.elapsedMs/1000)%60}s from your first play · time does not affect rank` : '';
-  el('rank').textContent = save.result ? `At submission: rank ${save.result.rank} of ${save.result.total}${save.result.tied>1?` · ${save.result.tied} tied`:''}` : submitting ? 'Checking your result…' : 'Daily ranking is not verified yet.';
-  el('today-link').hidden = puzzle.id === new Date().toISOString().slice(0,10);
-  streak();
-}
-async function submit() {
-  if (!complete() || submitting) return;
-  submitting = true; delete save.result;
-  el('retry-submit').hidden = true; showResult();
-  try {
-    await ensureSession();
-    const result = await api<Result>('result', {puzzleId:puzzle.id,sessionId:save.sessionId,words:save.words,dictionaryVersion:puzzle.dictionaryVersion});
-    // Only the current authenticated server response can establish a rank or minimum.
-    save.result = result; save.words = result.words; persist(); render();
-    if (el<HTMLDialogElement>('share-dialog').open) updateShare();
-  } catch (error) {
-    el('rank').textContent = `${error instanceof Error?error.message:'Could not submit your result.'} Your solve is saved on this device.`;
-    el('retry-submit').hidden = false;
-  } finally { submitting = false; el<HTMLButtonElement>('replay').disabled=false; }
-}
-el('confirm').onclick = () => {
-  if (!playing || !selected.length || complete()) return;
-  const word = selected.map(i => puzzle.letters[i]).join('').toLowerCase();
-  if (!dictionary.has(word)) { message('Not in the word list.'); animate(el('word'),[{transform:'translateX(0)'},{transform:'translateX(-4px)'},{transform:'translateX(4px)'},{transform:'translateX(0)'}]); el('report-word').hidden=false; track('word_invalid'); return; }
-  save.words.push(word); save.used.push(...selected); selected = []; persist(); render(); track('word_valid');
-  if (complete()) { message('Every letter used.'); animate(el('result'),[{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'translateY(0)'}],300); celebrate(); el('share').focus(); void submit(); }
-  else { animate(el('words').lastElementChild,[{opacity:0,transform:'translateY(5px) scale(.95)'},{opacity:1,transform:'translateY(0) scale(1)'}]); message(`${word.toUpperCase()} added.`); focusTile(); }
-};
-el('backspace').onclick = () => { if (complete()) return; selected.pop(); render(); message(selected.map(i => puzzle.letters[i]).join('')); };
-function resetAttempt() {
-  save.words = []; save.used = []; delete save.result; selected = []; persist(); render(); message('A fresh start. Same 15 letters.'); track('puzzle_reset'); focusTile();
-}
-el('reset').onclick = () => { if (save.words.length) el<HTMLDialogElement>('reset-dialog').showModal(); else resetAttempt(); };
-el('reset-confirm').onclick = () => { el<HTMLDialogElement>('reset-dialog').close(); resetAttempt(); };
-el('replay').onclick = () => { if (!submitting) resetAttempt(); };
-el('view-best').onclick = () => {
-  if (!save.bestWords) return;
-  save.words=[...save.bestWords];save.used=Array.from({length:15},(_,i)=>i);selected=[];persist();render();void submit();
-};
-el('shuffle').onclick = () => {
-  if (complete()) return;
-  const available = save.order.filter(index => !save.used.includes(index));
-  for (let i=available.length-1;i>0;i--) { const j = Math.floor(Math.random()*(i+1)); [available[i],available[j]] = [available[j],available[i]]; }
-  let next = 0; save.order = save.order.map(index => save.used.includes(index) ? index : available[next++]);
-  persist(); render(); message('Letters shuffled.');
-};
-el('retry-submit').onclick = () => void submit();
-el('play').onclick = () => {
-  playing = true; render();
-  if (!complete()) {
-    void ensureSession().catch(error => message(error.message));
-    if (!storage.get('jumble:help-seen')) { storage.set('jumble:help-seen','1'); el<HTMLDialogElement>('help-dialog').showModal(); }
-    else focusTile();
-  } else if (!save.result) void submit();
-};
-el('back').onclick = () => { playing = false; render(); el('play').focus(); };
-el('retry-load').onclick = () => location.reload();
-function challengeUrl() { const url=new URL(location.origin);url.searchParams.set('day',puzzle.id);return url.href; }
-function shareText() { return resultShare(puzzle.id,save.words,challengeUrl(),el<HTMLInputElement>('reveal-words').checked,save.result?.minimum); }
-function updateShare() {
-  el<HTMLTextAreaElement>('share-preview').value=shareText();
-  el<HTMLAnchorElement>('share-x').href=`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText())}`;
-}
-el('share').onclick = () => { el<HTMLInputElement>('reveal-words').checked=false;updateShare();el('share-status').textContent='';el<HTMLDialogElement>('share-dialog').showModal(); };
-el('reveal-words').onchange=updateShare;
-async function copyShare(text: string) {
-  try { await navigator.clipboard.writeText(text);el('share-status').textContent='Copied.';track('share'); }
-  catch { const area=el<HTMLTextAreaElement>('share-preview');area.value=text;area.focus();area.select();el('share-status').textContent='Select and copy the text above.'; }
-}
-el('copy-result').onclick=()=>void copyShare(shareText());
-el('copy-link').onclick=()=>void copyShare(challengeUrl());
-el('native-share').onclick=async()=>{
-  try { if(navigator.share){await navigator.share({text:shareText()});track('share');}else await copyShare(shareText()); }
-  catch(error){if(!(error instanceof DOMException && error.name==='AbortError'))await copyShare(shareText());}
-};
-el('download-result').onclick=async()=>{
-  try {
-    const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=630;
-    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Image download is unavailable. Copy your result instead.');
-    ctx.fillStyle='#faf9f6';ctx.fillRect(0,0,1200,630);
-    const logo=new Image();logo.src='/assets/jumble-logo-v3-720.webp';await logo.decode();ctx.drawImage(logo,40,12,360,360*logo.naturalHeight/logo.naturalWidth);
-    ctx.fillStyle='#17212e';ctx.font='bold 40px system-ui';ctx.fillText(`${save.words.length} words. All 15 letters.`,430,100);
-    ctx.font='24px system-ui';ctx.fillText(puzzle.id,430,145);
-    const reveal=el<HTMLInputElement>('reveal-words').checked;
-    save.words.forEach((word,row)=>{
-      const y=218+row*22;ctx.font='18px system-ui';
-      if(reveal){ctx.fillStyle='#17212e';ctx.fillText(word.toUpperCase(),60,y+16);}
-      else for(let i=0;i<word.length;i++){ctx.fillStyle='#a9d2ff';ctx.fillRect(60+i*24,y,18,18);}
-    });
-    ctx.fillStyle='#17212e';ctx.font='22px system-ui';ctx.fillText('Same letters. Different minds.',60,580);ctx.font='18px system-ui';ctx.fillText(challengeUrl(),60,612,1080);
-    const link=document.createElement('a');link.download=`jumble-${puzzle.id}${reveal?'-words':''}.png`;link.href=canvas.toDataURL('image/png');link.click();track('share');
-  } catch(error){el('share-status').textContent=error instanceof Error?error.message:'Image download failed. Copy your result instead.';}
-};
-function showHistory() {
-  const rows=readHistory(storage.get('jumble:history')),stats=summarizeHistory(rows,new Date().toISOString().slice(0,10));
-  el('history-summary').textContent=stats.completed?`${stats.completed} solved · ${stats.current} day streak · longest ${stats.longest} · ${stats.averageWords.toFixed(1)} average words · ${stats.minimumSolves} minimum solves recorded`:'No solves saved yet. Your first one starts here.';
-  el('history-list').replaceChildren(...rows.slice(-30).reverse().map(row=>{const li=document.createElement('li'),a=document.createElement('a');a.href=`/?day=${encodeURIComponent(row.day)}`;a.textContent=`${row.day} · ${row.words.length} words`;li.append(a);return li;}));
-  el<HTMLDialogElement>('history-dialog').showModal();
-}
-el('history').onclick=showHistory;el('result-history').onclick=showHistory;
-el('report-word').onclick=()=>{el<HTMLInputElement>('report-input').value=selected.map(i=>puzzle.letters[i]).join('').toLowerCase();el('report-status').textContent='';el<HTMLDialogElement>('report-dialog').showModal();};
-el<HTMLFormElement>('report-form').onsubmit=async event=>{
-  event.preventDefault();const button=el('report-form').querySelector<HTMLButtonElement>('button[type=submit]')!;button.disabled=true;
-  try {await api('report',{puzzleId:puzzle.id,dictionaryVersion:puzzle.dictionaryVersion,word:el<HTMLInputElement>('report-input').value,reason:el<HTMLTextAreaElement>('report-reason').value});el('report-status').textContent='Sent for review. Today’s word list stays the same.';}
-  catch(error){el('report-status').textContent=error instanceof Error?error.message:'Report could not send. Try again.';}
-  finally{button.disabled=false;}
-};
-const dark = storage.get('jumble:theme')==='dark' || (!storage.get('jumble:theme') && matchMedia('(prefers-color-scheme:dark)').matches);
-document.body.classList.toggle('dark',dark);
-function themeName() {
-  const dark = document.body.classList.contains('dark');
-  el('theme').setAttribute('aria-label',dark?'Use light theme':'Use dark theme');
-  document.querySelectorAll<HTMLImageElement>('img[data-logo]').forEach(image => { image.src = `/assets/jumble-logo-v3${dark?'-dark':''}-720.webp`; });
-}
-themeName();
-el('theme').onclick = () => { document.body.classList.toggle('dark'); storage.set('jumble:theme',document.body.classList.contains('dark')?'dark':'light'); themeName(); track('theme_toggle'); };
-el('help').onclick = () => el<HTMLDialogElement>('help-dialog').showModal();
-document.querySelectorAll<HTMLButtonElement>('dialog .close, .close-help').forEach(button => button.onclick = () => { button.closest('dialog')?.close(); if (button.classList.contains('close-help') && playing && !complete()) focusTile(); });
+import { summarizeHistory, todayLinkVisible } from './results.js';
+import { normalizeBoard, replaySwapSession } from '../engine/swap.mjs';
+const MODE = 'swap-v1';
+type Action = {type:'swap';from:number;to:number}|{type:'undo'}|{type:'reset'};
+type Puzzle = {id:string;mode:string;board:string[];dictionaryVersion:string;preview?:string};
+type Result = {puzzleId:string;mode:string;words:string[];moves:number;rank:number;total:number;tied:number;actions:Action[]};
+type Save = {version:1;mode:string;puzzleId:string;dictionaryVersion:string;initialBoard:string;actions:Action[]};
+const el = <T extends HTMLElement = HTMLElement>(id:string) => document.getElementById(id) as T;
+const message=(text:string)=>{el('message').textContent=text;};
+const storage={get(key:string){try{return localStorage.getItem(key);}catch{return null;}},set(key:string,value:string){try{localStorage.setItem(key,value);}catch{message('Storage is unavailable. Keep this tab open to save your progress.');}}};
+async function api<T>(path:string,body?:unknown):Promise<T>{const response=await fetch(`/api/${path}`,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});if(response.status===204)return undefined as T;if(!response.headers.get('content-type')?.includes('application/json'))throw Error('Jumble could not connect. Please try again.');const data=await response.json();if(!response.ok)throw Object.assign(Error(data.error||'Could not connect. Please try again.'),{code:data.code});return data;}
+const track=(name:string)=>{void api('event',{name,mode:MODE}).catch(()=>{});};
+let puzzle:Puzzle,save:Save,dictionary:Set<string>,selected:number|null=null,result:Result|undefined,sessionId:string|undefined,sessionRequest:Promise<void>|undefined,submitting=false,animating=false;
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+const state=()=>replaySwapSession(puzzle.board,save.actions,dictionary);
+const saveKey=()=>`jumble:${MODE}:${puzzle.id}`;
+function persist(){storage.set(saveKey(),JSON.stringify(save));}
+function ensureSession(){if(sessionId)return Promise.resolve();if(!sessionRequest)sessionRequest=api<{sessionId:string}>('session',{puzzleId:puzzle.id,mode:MODE}).then(data=>{sessionId=data.sessionId;}).finally(()=>{sessionRequest=undefined;});return sessionRequest;}
+function render(){const current=state(),focused=document.activeElement instanceof HTMLElement?document.activeElement.id:'';const board=el('tiles');board.replaceChildren();for(let row=0;row<3;row++){for(let col=0;col<5;col++){const i=row*5+col,button=document.createElement('button');const legal=selected!==null&&selected!==i&&(Math.floor(selected/5)===row||selected%5===col)&&current.board[selected]!==current.board[i];button.id=`tile-${i}`;button.className=`tile${current.validRows[row]?' valid':''}${selected===i?' selected':''}${legal?' partner':''}`;button.textContent=current.board[i];button.disabled=current.won;button.setAttribute('aria-pressed',String(selected===i));button.setAttribute('aria-label',`${current.board[i]}, row ${row+1}, column ${col+1}${current.validRows[row]?', valid word':''}${selected===i?', selected':legal?', available to swap':''}`);button.onclick=()=>void selectTile(i);board.append(button);}const check=document.createElement('span');check.className='row-check';check.textContent=current.validRows[row]?`Row ${row+1} is a word.`:'';check.setAttribute('aria-label',current.validRows[row]?`Row ${row+1}: ${current.rows[row]}, valid`:`Row ${row+1}: not a distinct word`);board.append(check);}el('moves').textContent=`${current.moves} swap${current.moves===1?'':'s'}`;el<HTMLButtonElement>('undo').disabled=current.won||!current.undoDepth;el<HTMLButtonElement>('reset').disabled=current.won||!save.actions.length;el('result').hidden=!current.won;const streak=summarizeHistory(history(),new Date().toISOString().slice(0,10)).current;el('streak').textContent=streak?`${streak} day${streak===1?'':'s'} in a row on this device`:'';document.querySelector('.intro p')?.classList.toggle('solved',current.won);el('headline').textContent=current.won?'Three words. Nicely done.':'Make three words.';el<HTMLButtonElement>('replay').disabled=submitting;el('rank').textContent=result?`Best: ${result.moves} swaps · rank ${result.rank} of ${result.total} at submission${result.tied>1?` · ${result.tied} tied`:''}`:submitting?'Verifying your solve…':'Solved here. Online ranking is not verified yet.';if(focused)document.getElementById(focused)?.focus({preventScroll:true});}
+async function selectTile(index:number){if(!puzzle||animating||state().won)return;if(selected===null){selected=index;render();message('Choose a tile in the same row or column.');return;}if(selected===index){selected=null;render();message('');return;}const from=selected,previous=state(),before=previous.board;if(Math.floor(from/5)!==Math.floor(index/5)&&from%5!==index%5){message('Choose a tile in the same row or column.');return;}if(before[from]===before[index]){message('Those letters are the same. Choose a different letter.');return;}if(save.actions.length>=1000){message('This attempt has reached its 1,000-action limit. Your progress is saved.');return;}const a=el(`tile-${from}`).getBoundingClientRect(),b=el(`tile-${index}`).getBoundingClientRect();save.actions.push({type:'swap',from,to:index});selected=null;persist();render();void ensureSession().catch(error=>message(error.message));if(!reducedMotion.matches){animating=true;const animations=[el(`tile-${from}`).animate([{transform:`translate(${b.x-a.x}px,${b.y-a.y}px)`},{transform:'translate(0,0)'}],{duration:180,easing:'ease-out'}),el(`tile-${index}`).animate([{transform:`translate(${a.x-b.x}px,${a.y-b.y}px)`},{transform:'translate(0,0)'}],{duration:180,easing:'ease-out'})];const after=state();for(let row=0;row<3;row++)if(after.validRows[row]&&!previous.validRows[row])for(let col=0;col<5;col++)animations.push(el(`tile-${row*5+col}`).animate([{scale:'1'},{scale:'1.055'},{scale:'1'}],{duration:180,delay:160,easing:'ease-out'}));await Promise.allSettled(animations.map(animation=>animation.finished));animating=false;}const current=state();message(current.won?'':`${current.validRows.filter(Boolean).length} of 3 rows are words.`);if(current.won){recordHistory();el('share').focus({preventScroll:true});void submit();}}
+function act(type:'undo'|'reset'){if(!puzzle||animating||state().won||save.actions.length>=1000)return;save.actions.push({type});selected=null;persist();render();message(type==='undo'?'Swap undone. Your count stays.':'Board reset. Your count stays.');if(type==='reset')track('puzzle_reset');el('tile-0').focus({preventScroll:true});}
+el('undo').onclick=()=>act('undo');el('reset').onclick=()=>el<HTMLDialogElement>('reset-dialog').showModal();el('reset-confirm').onclick=()=>{el<HTMLDialogElement>('reset-dialog').close();act('reset');};
+el('replay').onclick=()=>{if(submitting)return;save.actions=[];result=undefined;selected=null;persist();render();message('Same board. Try a different route.');el('tile-0').focus({preventScroll:true});};
+async function submit(){if(!state().won||submitting)return;submitting=true;el('retry-submit').hidden=true;render();try{await ensureSession();result=await api<Result>('result',{mode:MODE,puzzleId:puzzle.id,sessionId,dictionaryVersion:puzzle.dictionaryVersion,actions:save.actions});if(result.mode!==MODE||result.puzzleId!==puzzle.id)throw Error('The result could not be verified.');}catch(error){message(error instanceof Error?error.message:'Your solve is saved. Try verification again.');el('retry-submit').hidden=false;}finally{submitting=false;render();}}
+el('retry-submit').onclick=()=>void submit();el('retry-load').onclick=()=>location.reload();
+type HistoryRow={day:string;moves:number;words:string[]};
+function history():HistoryRow[]{try{const rows=JSON.parse(storage.get(`jumble:${MODE}:history`)||'[]');return Array.isArray(rows)?rows.filter((r:HistoryRow)=>r&&/^\d{4}-\d{2}-\d{2}$/.test(r.day)&&Number.isSafeInteger(r.moves)&&r.moves>0&&Array.isArray(r.words)&&r.words.length===3&&r.words.every(w=>typeof w==='string'&&/^[a-z]{5}$/.test(w))):[];}catch{return [];}}
+function recordHistory(){const current=state(),rows=history(),previous=rows.find(r=>r.day===puzzle.id);if(!previous||current.moves<previous.moves)storage.set(`jumble:${MODE}:history`,JSON.stringify([...rows.filter(r=>r.day!==puzzle.id),{day:puzzle.id,moves:current.moves,words:current.rows}].sort((a,b)=>a.day.localeCompare(b.day))));}
+el('history').onclick=()=>{const rows=history();el('history-summary').textContent=rows.length?`${rows.length} solved · ${summarizeHistory(rows,new Date().toISOString().slice(0,10)).current} day streak · ${(rows.reduce((sum,row)=>sum+row.moves,0)/rows.length).toFixed(1)} average swaps`:'Your first solve starts here.';el('history-list').replaceChildren(...rows.slice(-30).reverse().map(row=>{const li=document.createElement('li'),a=document.createElement('a');a.href=`/?mode=${MODE}&day=${encodeURIComponent(row.day)}`;a.textContent=`${row.day} · ${row.moves} swaps`;li.append(a);return li;}));el<HTMLDialogElement>('history-dialog').showModal();};
+function challengeUrl(){const url=new URL(location.origin);url.searchParams.set('mode',MODE);url.searchParams.set('day',puzzle.id);return url.href;}
+function shareText(){const current=state();return `JUMBLE SWAP ${puzzle.id}\n${current.moves} swaps\n${current.rows.map(word=>el<HTMLInputElement>('reveal-words').checked?word.toUpperCase():'🟩🟩🟩🟩🟩').join('\n')}\n${challengeUrl()}`;}
+function updateShare(){el<HTMLTextAreaElement>('share-preview').value=shareText();el<HTMLAnchorElement>('share-x').href=`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText())}`;}
+el('share').onclick=()=>{el<HTMLInputElement>('reveal-words').checked=false;updateShare();el('share-status').textContent='';el<HTMLDialogElement>('share-dialog').showModal();};el('reveal-words').onchange=updateShare;
+async function copyShare(text:string){try{await navigator.clipboard.writeText(text);el('share-status').textContent='Copied.';track('share');}catch{const area=el<HTMLTextAreaElement>('share-preview');area.value=text;area.focus();area.select();el('share-status').textContent='Select and copy the text above.';}}
+el('copy-result').onclick=()=>void copyShare(shareText());el('copy-link').onclick=()=>void copyShare(challengeUrl());el('native-share').onclick=async()=>{try{if(navigator.share){await navigator.share({text:shareText()});track('share');}else await copyShare(shareText());}catch(error){if(!(error instanceof DOMException&&error.name==='AbortError'))await copyShare(shareText());}};
+el('download-result').onclick=()=>{const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=630;const ctx=canvas.getContext('2d');if(!ctx)return;ctx.fillStyle='#faf8f1';ctx.fillRect(0,0,1200,630);ctx.fillStyle='#15212d';ctx.font='bold 48px system-ui';ctx.fillText('JUMBLE SWAP',60,80);ctx.font='30px system-ui';ctx.fillText(`${puzzle.id} · ${state().moves} swaps`,60,140);state().rows.forEach((word,row)=>{for(let col=0;col<5;col++){ctx.fillStyle='#d1ebcf';ctx.fillRect(60+col*70,185+row*75,58,58);if(el<HTMLInputElement>('reveal-words').checked){ctx.fillStyle='#15212d';ctx.fillText(word[col].toUpperCase(),74+col*70,225+row*75);}}});ctx.fillStyle='#15212d';ctx.font='24px system-ui';ctx.fillText(challengeUrl(),60,570,1080);const link=document.createElement('a');link.download=`jumble-swap-${puzzle.id}.png`;link.href=canvas.toDataURL('image/png');link.click();track('share');};
+const dark=storage.get('jumble:theme')==='dark'||(!storage.get('jumble:theme')&&matchMedia('(prefers-color-scheme:dark)').matches);document.body.classList.toggle('dark',dark);
+function themeName(){const dark=document.body.classList.contains('dark');el('theme').setAttribute('aria-label',dark?'Use light theme':'Use dark theme');el<HTMLImageElement>('logo').src=`/assets/jumble-logo-v3${dark?'-dark':''}-720.webp`;}
+themeName();el('theme').onclick=()=>{document.body.classList.toggle('dark');storage.set('jumble:theme',document.body.classList.contains('dark')?'dark':'light');themeName();if(puzzle)track('theme_toggle');};el('help').onclick=()=>el<HTMLDialogElement>('help-dialog').showModal();document.querySelectorAll<HTMLButtonElement>('dialog .close,.close-help').forEach(button=>button.onclick=()=>button.closest('dialog')?.close());
 async function openSponsors() {
   el<HTMLDialogElement>('sponsor-dialog').showModal(); track('sponsor_open');
   try {
@@ -272,7 +54,7 @@ async function openSponsors() {
   } catch (error) { el('sponsor-wall').textContent = error instanceof Error?error.message:'Sponsors could not load.'; }
 }
 el('sponsors-link').onclick = () => void openSponsors();
-el('entry-sponsors').onclick = () => void openSponsors();
+
 el('sponsor-mode').onchange = () => {
   const takeover = el<HTMLSelectElement>('sponsor-mode').value==='takeover';
   el('amount-label').hidden = takeover; el('takeover-detail').hidden = !takeover;
@@ -283,12 +65,12 @@ el<HTMLFormElement>('sponsor-form').onsubmit = async event => {
   const button = form.querySelector<HTMLButtonElement>('button[type=submit]')!; button.disabled = true;
   try {
     const data = new FormData(form), mode = data.get('mode');
-    const payload = {name:data.get('name'),url:data.get('url'),mode,puzzleId:puzzle.id,returnTo:playing&&complete()?'result':'entry',...(mode==='takeover'?{}:{amount:Number(data.get('amount'))*100})};
+    const payload = {name:data.get('name'),url:data.get('url'),mode,gameMode:MODE,puzzleId:puzzle.id,returnTo:state().won?'result':'entry',...(mode==='takeover'?{}:{amount:Number(data.get('amount'))*100})};
     const fingerprint = JSON.stringify(payload);
     let pending: {fingerprint:string;submissionId:string}|null = null;
-    try { pending = JSON.parse(storage.get('jumble:checkout')||'null'); } catch {}
+    try { pending = JSON.parse(storage.get('jumble:swap-v1:checkout')||'null'); } catch {}
     if (pending?.fingerprint!==fingerprint || typeof pending.submissionId!=='string') pending = {fingerprint,submissionId:crypto.randomUUID()};
-    storage.set('jumble:checkout',JSON.stringify(pending));
+    storage.set('jumble:swap-v1:checkout',JSON.stringify(pending));
     const response = await api<{url:string}>('checkout',{...payload,submissionId:pending.submissionId});
     const destination = new URL(response.url);
     if (destination.protocol!=='https:' || destination.hostname!=='checkout.stripe.com') throw new Error('Checkout returned an unexpected destination.');
@@ -297,73 +79,16 @@ el<HTMLFormElement>('sponsor-form').onsubmit = async event => {
     el('sponsor-message').textContent = error instanceof Error?error.message:'Checkout could not start.'; button.disabled = false;
     if (error instanceof Error && 'code' in error && ['SUBMISSION_EXPIRED','CHECKOUT_EXPIRED'].includes(String(error.code))) {
       const restart=document.createElement('button');restart.type='button';restart.textContent='Start a new checkout';
-      restart.onclick=()=>{storage.set('jumble:checkout','null');restart.remove();el('sponsor-message').textContent='Ready for a new checkout. Your previous payment status has not changed.';};
+      restart.onclick=()=>{storage.set('jumble:swap-v1:checkout','null');restart.remove();el('sponsor-message').textContent='Ready for a new checkout. Your previous payment status has not changed.';};
       el('sponsor-message').append(restart);
     }
   }
 };
-document.addEventListener('keydown',event => {
-  if (!puzzle || !playing || complete() || document.querySelector('dialog[open]') || event.ctrlKey || event.metaKey || event.altKey || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
-  if (event.key==='Enter') {
-    // Native Enter keeps navigation, tile and composed-letter buttons operable.
-    if (event.target instanceof HTMLButtonElement && event.target.id!=='confirm' && !event.target.classList.contains('tile')) return;
-    event.preventDefault(); el('confirm').click();
-  } else if (event.key==='Backspace') { event.preventDefault(); el('backspace').click(); }
-  else if (/^[a-z]$/i.test(event.key)) {
-    const index = save.order.find(i => puzzle.letters[i]===event.key.toUpperCase() && !save.used.includes(i) && !selected.includes(i));
-    if (index!==undefined) { event.preventDefault(); toggleTile(index); }
-  }
-});
-async function boot() {
-  try {
-    const params = new URLSearchParams(location.search), requested = params.get('day');
-    puzzle = await api<Puzzle>(`puzzle${requested?`?day=${encodeURIComponent(requested)}`:''}`);
-    puzzle.letters = Array.from(puzzle.letters, letter => letter.toUpperCase());
-    if (puzzle.letters.length!==15 || puzzle.letters.some(letter => !/^[A-Z]$/.test(letter))) throw new Error('This puzzle could not be loaded. Try again.');
-    const response = await fetch(`/data/words-${encodeURIComponent(puzzle.dictionaryVersion)}.json`,{signal:AbortSignal.timeout(15000)});
-    if (!response.ok) throw new Error('The word list could not load. Try again.');
-    const lexicon = await response.json();
-    if (lexicon.version!==puzzle.dictionaryVersion || !Array.isArray(lexicon.words)) throw new Error('The word list could not be verified.');
-    dictionary = new Set(lexicon.words);
-    save = {version:1,puzzleId:puzzle.id,dictionaryVersion:puzzle.dictionaryVersion,words:[],used:[],order:Array.from({length:15},(_,i)=>i)};
-    try {
-      const restored = JSON.parse(storage.get(`jumble:${puzzle.id}`)||'null');
-      const indices = (value: unknown): value is number[] => Array.isArray(value) && value.every(i => Number.isInteger(i) && i>=0 && i<15) && new Set(value).size===value.length;
-      if (restored?.version===1 && restored.puzzleId===puzzle.id && restored.dictionaryVersion===puzzle.dictionaryVersion
-        && Array.isArray(restored.words) && restored.words.length<=15 && indices(restored.used)
-        && restored.words.every((word:unknown) => typeof word==='string' && dictionary.has(word))
-        && restored.words.join('').split('').sort().join('')===restored.used.map((i:number)=>puzzle.letters[i].toLowerCase()).sort().join('')) {
-        // Do not restore session authority, ranking, minimum, time or arbitrary saved fields.
-        save.words = restored.words; save.used = restored.used;
-        if (indices(restored.order) && restored.order.length===15) save.order = restored.order;
-        if (Array.isArray(restored.bestWords) && restored.bestWords.length<=15
-          && restored.bestWords.every((word:unknown)=>typeof word==='string' && dictionary.has(word))
-          && restored.bestWords.join('').split('').sort().join('')===puzzle.letters.join('').toLowerCase().split('').sort().join('')) save.bestWords=restored.bestWords;
-      }
-    } catch {}
-    el('day').textContent = puzzle.id; el('entry-status').textContent = '';
-    el<HTMLButtonElement>('play').disabled = false;
-    el('play').textContent = complete()?'View result':save.used.length?'Continue':'Play';
-    playing = complete() || save.used.length>0;
-    render(); track('puzzle_view');
-    if (complete()) void submit();
-    const updateCountdown = () => {
-      const now = Date.now(), next = (Math.floor(now/86400000)+1)*86400000;
-      el('countdown').textContent = `Next Jumble in ${Math.floor((next-now)/3600000)}h ${Math.floor((next-now)%3600000/60000)}m · midnight UTC`;
-      if (puzzle.id < new Date(now).toISOString().slice(0,10)) {
-        el('today-link').hidden = false;
-        if (playing && !complete()) message('A new Jumble is available. Finish this puzzle, or open today’s Jumble below.');
-      }
-    };
-    updateCountdown(); setInterval(updateCountdown,60000);
-    if (params.get('sponsor')==='thanks' || params.get('sponsor')==='cancelled') {
-      storage.set('jumble:checkout','null');
-      playing = params.get('view')==='result' && complete(); render(); el('sponsor-return').hidden = false;
-      el('sponsor-return').textContent = params.get('sponsor')==='thanks'?'Thanks. Your listing appears after payment confirmation.':'Checkout cancelled. You can try again whenever you like.';
-    }
-  } catch (error) {
-    el('entry-status').textContent = error instanceof Error?error.message:'Jumble could not load. Try again.';
-    el('retry-load').hidden = false;
-  }
-}
+
+document.addEventListener('keydown',event=>{if(!puzzle||document.querySelector('dialog[open]')||event.ctrlKey||event.metaKey||event.altKey)return;const target=event.target;if(!(target instanceof HTMLButtonElement)||!target.id.startsWith('tile-'))return;const i=Number(target.id.slice(5));let next=i;if(event.key==='ArrowLeft'&&i%5>0)next--;else if(event.key==='ArrowRight'&&i%5<4)next++;else if(event.key==='ArrowUp'&&i>=5)next-=5;else if(event.key==='ArrowDown'&&i<10)next+=5;else if(event.key==='Escape'){selected=null;render();message('Selection cleared.');}else return;event.preventDefault();el(`tile-${next}`).focus();});
+reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)document.getAnimations().forEach(animation=>animation.cancel());});
+async function boot(){try{const params=new URLSearchParams(location.search),requested=params.get('day');puzzle=await api<Puzzle>(`puzzle?mode=${MODE}${requested?`&day=${encodeURIComponent(requested)}`:''}`);if(puzzle.mode!==MODE)throw Error('This version of Jumble is not available yet.');if(puzzle.preview){el('preview-notice').hidden=false;el('preview-notice').textContent=puzzle.preview==='synthetic-fixture'?'Preview · sample puzzle · local rankings only':'Preview · local rankings only';}puzzle.board=normalizeBoard(puzzle.board);const r=await fetch(`/data/swap-words-${encodeURIComponent(puzzle.dictionaryVersion)}.json`,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('The word list could not load. Try again.');const lexicon=await r.json();if(lexicon.version!==puzzle.dictionaryVersion||!Array.isArray(lexicon.words)||!lexicon.words.every((w:unknown)=>typeof w==='string'&&/^[a-z]{5}$/.test(w)))throw Error('The word list could not be verified.');dictionary=new Set(lexicon.words);save={version:1,mode:MODE,puzzleId:puzzle.id,dictionaryVersion:puzzle.dictionaryVersion,initialBoard:puzzle.board.join(''),actions:[]};try{const restored=JSON.parse(storage.get(saveKey())||'null');if(restored?.version===1&&restored.mode===MODE&&restored.puzzleId===puzzle.id&&restored.dictionaryVersion===puzzle.dictionaryVersion&&restored.initialBoard===puzzle.board.join('')&&Array.isArray(restored.actions)){replaySwapSession(puzzle.board,restored.actions,dictionary);save.actions=restored.actions;}}catch{}el('day').textContent=`DAILY · ${puzzle.id}`;el('game').setAttribute('aria-busy','false');render();message('');track('puzzle_view');updateTodayLink();if(state().won)void submit();if(['thanks','cancelled'].includes(params.get('sponsor')||'')){storage.set(`jumble:${MODE}:checkout`,'null');el('sponsor-return').hidden=false;el('sponsor-return').textContent=params.get('sponsor')==='thanks'?'Thanks. Your listing appears after payment confirmation.':'Checkout cancelled. Your board is saved.';}}catch(error){message(error instanceof Error?error.message:'Jumble could not load.');el('retry-load').hidden=false;}}
+let rolloverTimer:number;
+function updateTodayLink(){clearTimeout(rolloverTimer);el('today-link').hidden=!todayLinkVisible(puzzle.id);rolloverTimer=window.setTimeout(updateTodayLink,86400000-Date.now()%86400000+50);}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&puzzle)updateTodayLink();});
 void boot();

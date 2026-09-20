@@ -1,0 +1,10 @@
+export const SWAP_RULES_VERSION: 'swap-v1';
+export type SwapAction = { from: number; to: number };
+export type SwapSessionAction = ({ type: 'swap' } & SwapAction) | { type: 'undo' } | { type: 'reset' };
+export type SwapDictionary = { has(word: string): boolean };
+export function normalizeBoard(input: string | readonly string[]): string[];
+export function createSwapDictionary(words: string[]): SwapDictionary & { readonly words: readonly string[] };
+export function applySwap(input: string | readonly string[], action: SwapAction): string[];
+export function evaluateBoard(input: string | readonly string[], dictionary: SwapDictionary): { rows: string[]; validRows: boolean[]; won: boolean };
+export function replaySwaps(board: string | readonly string[], actions: SwapAction[]): string[];
+export function replaySwapSession(board: string | readonly string[], actions: SwapSessionAction[], dictionary: SwapDictionary): { board: string[]; moves: number; undoDepth: number; rows: string[]; validRows: boolean[]; won: boolean };

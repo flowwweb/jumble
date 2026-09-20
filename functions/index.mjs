@@ -5,7 +5,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import Stripe from 'stripe';
-import { createDictionary } from '../engine/index.mjs';
+import { createSwapDictionary } from '../engine/swap.mjs';
 import { createGameService, GameError } from './game.mjs';
 import { createSponsorService, SponsorError } from './sponsors.mjs';
 
@@ -21,7 +21,7 @@ const allowedOrigins=new Set([...publicOrigins,...(emulator?['http://127.0.0.1:5
 const readJson=path=>JSON.parse(readFileSync(new URL(path,import.meta.url),'utf8'));
 let game, sponsors, stripe;
 function gameService(){
-  if(!game){const manifest=readJson('../data/dictionary/manifest.json');game=createGameService({db,dictionary:createDictionary(readJson('../data/dictionary/words.json')),dictionaryVersion:manifest.version,puzzles:readJson('../data/puzzles.json')});}
+  if(!game){const dictionary=readJson('../data/swap/words.json');game=createGameService({db,mode:'swap-v1',dictionary:createSwapDictionary(dictionary.words),dictionaryVersion:dictionary.version,puzzles:readJson('../data/swap/puzzles.json').map(puzzle=>({...puzzle,board:puzzle.letters}))});}
   return game;
 }
 function paymentServices(){
@@ -46,9 +46,9 @@ async function limit(req,route){
 const events=new Set(['puzzle_view','game_start','word_valid','word_invalid','puzzle_reset','puzzle_complete','share','theme_toggle','sponsor_open','checkout_start']);
 async function countEvent(name,uid,puzzleDay){
   if(!events.has(name))return;
-  const day=puzzleDay||new Date().toISOString().slice(0,10);const ref=db.doc(`analytics/${day}`);
+  const day=puzzleDay||new Date().toISOString().slice(0,10);const ref=db.doc(`swapV1Analytics/${day}`);
   if(name==='game_start'||name==='puzzle_complete'){
-    const unique=db.doc(`analytics/${day}/dedup/${mac(`${name}:${uid}`)}`);
+    const unique=db.doc(`swapV1Analytics/${day}/dedup/${mac(`${name}:${uid}`)}`);
     await db.runTransaction(async tx=>{if((await tx.get(unique)).exists)return;tx.set(unique,{event:name});tx.set(ref,{[name]:FieldValue.increment(1)},{merge:true});});
   }else await ref.set({[name]:FieldValue.increment(1)},{merge:true});
 }
@@ -70,7 +70,7 @@ async function handleRequest(req,res,payment=false){
     if(req.method==='POST'){
       if(!allowedOrigins.has(req.get('origin'))){res.status(403).json({error:'Open Jumble to make this request.'});return;}
       if(!req.is('application/json')){res.status(415).json({error:'Expected JSON.'});return;}
-      if((req.rawBody?.length||0)>8192){res.status(413).json({error:'Request too large.'});return;}
+      if((req.rawBody?.length||0)>(route==='result'?65536:8192)){res.status(413).json({error:'Request too large.'});return;}
     }
     const uid=identity(req,res);await limit(req,route);
     const game=payment?null:gameService();
@@ -81,7 +81,7 @@ async function handleRequest(req,res,payment=false){
     if(route==='result'&&req.method==='POST'){const result=await game.submitResult(uid,req.body);await countEvent('puzzle_complete',uid,result.puzzleId);res.json(result);return;}
     if(route==='report'&&req.method==='POST'){res.json(await game.reportWord(uid,req.body));return;}
     if(route==='checkout'&&req.method==='POST'){const requestOrigin=req.get('origin');const returnOrigin=publicOrigins.includes(requestOrigin)?requestOrigin:origin;const result=await sponsors.checkout(uid,req.body,returnOrigin);await countEvent('checkout_start',uid);res.json(result);return;}
-    if(route==='event'&&req.method==='POST'){if(!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
+    if(route==='event'&&req.method==='POST'){if(req.body?.mode!=='swap-v1'||!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
     res.status(404).json({error:'Not found.'});
   }catch(error){const known=error instanceof GameError||error instanceof SponsorError;console.error(JSON.stringify({event:'api_error',route,code:known?error.code:'INTERNAL'}));res.status(known?error.status:503).json({error:messages[error.code]||(known?'That request could not be accepted. Check your input and try again.':'Jumble could not connect. Please try again.'),code:known?error.code:'UNAVAILABLE'});}
 }

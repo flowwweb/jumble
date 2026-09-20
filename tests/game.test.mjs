@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGameService } from '../functions/game.mjs';
 import { createDictionary } from '../engine/index.mjs';
+import { createSwapDictionary } from '../engine/swap.mjs';
 
-function fixture() {
+function fixture(swap = false) {
   const records = new Map();
   let time = Date.parse('2026-09-19T10:00:00Z'), queue = Promise.resolve();
   const db = { doc: path => path, runTransaction(work) {
@@ -16,13 +17,55 @@ function fixture() {
     });
     queue = result.catch(() => {}); return result;
   } };
-  const dictionary = createDictionary(['apple', 'table', 'chair', 'appletable']);
+  const dictionary = swap ? createSwapDictionary(['apple', 'table', 'chair']) : createDictionary(['apple', 'table', 'chair', 'appletable']);
   const game = createGameService({ db, dictionary, dictionaryVersion: 'test-v1', now: () => time,
-    puzzles: ['2026-09-18', '2026-09-19', '2026-09-20'].map(id => ({ id, letters: 'appletablechair', dictionaryVersion: 'test-v1', minimum: 2 })) });
+    ...(swap ? {mode:'swap-v1'} : {}),
+    puzzles: ['2026-09-18', '2026-09-19', '2026-09-20'].map(id => ({ id, letters: 'appletablechair', board: [...'papletablechair'], dictionaryVersion: 'test-v1', minimum: 2 })) });
   return { game, dictionary, records, advance: milliseconds => { time += milliseconds; } };
 }
 const uid = 'anonymous-report-player';
 const report = (changes = {}) => ({ puzzleId: '2026-09-19', dictionaryVersion: 'test-v1', word: 'plate', reason: 'Common English noun', ...changes });
+
+test('SWAP replay counts forward swaps through undo/reset and preserves one authoritative best', async () => {
+  const {game, records, advance} = fixture(true);
+  const context = {puzzleId:'2026-09-19',mode:'swap-v1',dictionaryVersion:'test-v1'};
+  assert.deepEqual(Object.keys(game.getPuzzle()), ['id','mode','board','dictionaryVersion']);
+  const session = await game.startSession(uid,context);
+  const finish = {type:'swap',from:0,to:1};
+  const extra = {type:'swap',from:5,to:6};
+  advance(3000);
+  const submit = actions => game.submitResult(uid,{...context,sessionId:session.sessionId,actions,moves:0,elapsedMs:0});
+  const first = await submit([extra,{type:'undo'},extra,{type:'reset'},finish]);
+  assert.equal(first.moves,3); assert.equal(first.elapsedMs,3000);
+  assert.deepEqual(first.words,['apple','table','chair']);
+  advance(2000);
+  const noops = [{type:'swap',from:0,to:0},{type:'swap',from:0,to:6},{type:'swap',from:0,to:2}];
+  const [best,retry] = await Promise.all([submit([...noops,finish]),submit([finish])]);
+  assert.deepEqual(best,retry); assert.equal(best.moves,1); assert.equal(best.total,1);
+  assert.equal(best.elapsedMs,5000); assert.equal(best.firstCompletedAt,first.completedAt);
+  assert.deepEqual(await submit([extra,{type:'undo'},finish]),best);
+  assert.equal((await game.startSession(uid,context)).startedAt,session.startedAt);
+  assert.ok([...records.keys()].every(path=>path.startsWith('swapV1Days/')));
+  const second = await game.startSession('second-anonymous-user',context);
+  const tied = await game.submitResult('second-anonymous-user',{...context,sessionId:second.sessionId,actions:[finish]});
+  assert.equal(tied.tied,2); assert.equal(tied.rank,1); assert.equal(tied.total,2);
+});
+
+test('SWAP rejects legacy/version/session forgery, unsolved and terminal trailing replay', async () => {
+  const {game,records} = fixture(true);
+  const context = {puzzleId:'2026-09-19',mode:'swap-v1',dictionaryVersion:'test-v1'};
+  const session = await game.startSession(uid,context);
+  const finish = {type:'swap',from:0,to:1};
+  const input = {...context,sessionId:session.sessionId,actions:[finish]};
+  for (const change of [{mode:undefined},{mode:'shift-v1'},{dictionaryVersion:'old'},{sessionId:'fake'},
+    {actions:[]},{actions:[finish,{type:'undo'}]},{actions:[finish,{type:'reset'}]},
+    {actions:[{type:'cheat'}]},{actions:[{type:'swap',from:'0',to:1},finish]},
+    {actions:[{type:'reset',secret:'payload'},finish]},{actions:Array(1001).fill({type:'reset'})}]) {
+    await assert.rejects(game.submitResult(uid,{...input,...change}));
+  }
+  await assert.rejects(game.submitResult('another-anonymous-user',input));
+  assert.equal([...records.keys()].filter(path=>path.includes('/results/')).length,0);
+});
 
 test('word reports are pending, deduplicated, context-bound and never admit words', async () => {
   const { game, dictionary, records } = fixture();

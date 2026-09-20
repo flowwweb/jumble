@@ -1,4 +1,7 @@
 export type LocalResult = { day: string; words: string[]; minimum?: number };
+export function todayLinkVisible(puzzleDay: string, now = Date.now()) {
+  return puzzleDay < new Date(now).toISOString().slice(0, 10);
+}
 export function readHistory(raw: string | null): LocalResult[] {
   try {
     const rows: unknown = JSON.parse(raw || '[]');

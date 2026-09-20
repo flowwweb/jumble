@@ -5,6 +5,8 @@ await mkdir('dist',{recursive:true});
 const result=spawnSync(process.execPath,['node_modules/typescript/bin/tsc'],{stdio:'inherit'});
 if(result.status!==0)process.exit(result.status||1);
 await cp('public','dist',{recursive:true});
+await mkdir('dist/engine',{recursive:true});
+await cp('engine/swap.mjs','dist/engine/swap.mjs');
 await cp('src/style.css','dist/src/style.css');
 await writeFile('dist/index.html',(await readFile('index.html','utf8')).replace('/src/app.mjs','/src/app.js'));
 console.log('Built Jumble into dist/');

@@ -1,0 +1,16 @@
+{
+  "version": "swap-common-v2-6914181dbe64",
+  "rulesVersion": "swap-v1",
+  "seed": 20260920,
+  "start": "2026-09-20",
+  "count": 730,
+  "wordCount": 1478,
+  "seedWordCount": 137,
+  "vocabularySha256": "8395cabf4ca42a8123e3b452f424cc7956ce40513cc21068f8587706ec6ff29f",
+  "corpusSha256": "543e826957e0279560911fce22416abdb92fa6279021d91b1a904ab32f36ecd7",
+  "familiarSha256": "f151fc71e68c6f78a2fbd2e8e8b7b0f99168fc587b9cfce04361b753fd13ec33",
+  "acceptedReviewSha256": "b2ded12e871ee1cc9b51993e1db0df1b2638c2c715121ebb21592c3ef9491b17",
+  "sourceVersion": "esdb60-1e5b7d3a-j2-35d44375ad86",
+  "sourceCommit": "1e5b7d3a72f47a71da5d28686c1dd4b397178485",
+  "admission": "Distinct familiar seed words, legal 12-move witness without early win, unique board with zero dictionary rows at start including duplicate words, no one-move solution against full admitted vocabulary. Witness length is not an optimum or par."
+}
