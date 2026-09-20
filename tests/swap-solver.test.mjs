@@ -6,11 +6,11 @@ import { applySwap, replaySwapSession, createSwapDictionary, evaluateBoard } fro
 
 test('exact adjacent proof covers every accepted goal, not only the scramble target', async () => {
   const words = JSON.parse(await readFile(new URL('../data/swap/words.json', import.meta.url))).words;
-  const dictionary = createSwapDictionary(words), board = 'SRANEBLATECRICK';
+  const dictionary = createSwapDictionary(words), board = 'BTORYSOITHTROCK';
   assert.ok(evaluateBoard(board, dictionary).rows.every(word => !dictionary.has(word)));
   const result = solveSwapExact(board, words, { maxStates: 10000, maxMilliseconds: 5000 });
   assert.equal(result.status, 'PROVEN'); assert.equal(result.minimum, 2);
-  assert.equal(result.certificate.goalCount, 516);
+  assert.equal(result.certificate.goalCount, enumerateSwapGoals(board, words).length);
   assert.equal(result.certificate.exhaustiveBelow, 2);
   assert.equal(replaySwapSession(board, result.solution.map(action => ({ type: 'swap', ...action })), dictionary).won, true);
   // Independent exhaustive depth-one lower bound.

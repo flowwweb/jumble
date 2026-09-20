@@ -1,28 +1,28 @@
 {
   "id": "2099-01-01",
   "letters": [
-    "S",
-    "R",
-    "A",
-    "N",
-    "E",
-    "B",
+    "M",
+    "O",
+    "U",
     "L",
+    "S",
+    "V",
     "A",
-    "T",
+    "G",
     "E",
-    "C",
-    "R",
+    "S",
+    "S",
+    "O",
     "I",
     "C",
-    "K"
+    "E"
   ],
-  "dictionaryVersion": "swap-common-v2-6914181dbe64",
-  "rulesVersion": "swap-adjacent-v1",
+  "dictionaryVersion": "swap-accepted-v3-0ddbc02adcc5",
+  "rulesVersion": "swap-adjacent-v2",
   "solutionWords": [
-    "crane",
-    "slate",
-    "brick"
+    "souls",
+    "mages",
+    "voice"
   ],
   "solutionMoves": [
     {
@@ -36,10 +36,10 @@
   ],
   "optimality": {
     "status": "PROVEN",
-    "rulesVersion": "swap-adjacent-v1",
-    "dictionaryVersion": "swap-common-v2-6914181dbe64",
-    "boardSha256": "acc72df8640d65055c42921b4281cfc7fdc8c8afbe3e5bee6654c0fcf5f6e70e",
-    "dictionaryWordsSha256": "6914181dbe640e7757fa803b5bcd6b2498f56cf89bbdddd72d54dcba2596c708",
+    "rulesVersion": "swap-adjacent-v2",
+    "dictionaryVersion": "swap-accepted-v3-0ddbc02adcc5",
+    "boardSha256": "35a57d7045198aaad95c1b0d5705faa3acea1cd18a82381cef0f871b66ffad09",
+    "dictionaryWordsSha256": "0ddbc02adcc59f7a749f899c3610073f5c884b6997519558037df8bd72b07a57",
     "minimumMoves": 2,
     "optimalActions": [
       {
@@ -54,15 +54,15 @@
       }
     ],
     "optimalWords": [
-      "crane",
-      "slate",
-      "brick"
+      "souls",
+      "mages",
+      "voice"
     ],
     "proof": {
       "method": "multi-source-bidirectional-bfs-v1",
-      "goalCount": 516,
-      "discoveredStates": 674,
-      "expandedStates": 10,
+      "goalCount": 900,
+      "discoveredStates": 1079,
+      "expandedStates": 11,
       "completedRadii": [
         1,
         0

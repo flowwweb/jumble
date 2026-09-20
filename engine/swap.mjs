@@ -1,4 +1,4 @@
-export const SWAP_RULES_VERSION = 'swap-adjacent-v1';
+export const SWAP_RULES_VERSION = 'swap-adjacent-v2';
 
 export function normalizeBoard(input) {
   const board = typeof input === 'string' ? [...input] : input;

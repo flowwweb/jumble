@@ -1,27 +1,162 @@
 {
-  "rulesVersion": "swap-adjacent-v1",
-  "dictionaryVersion": "swap-common-v2-6914181dbe64",
-  "dictionaryWordsSha256": "6914181dbe640e7757fa803b5bcd6b2498f56cf89bbdddd72d54dcba2596c708",
-  "seed": 20260920,
-  "start": "2026-09-20",
+  "rulesVersion": "swap-adjacent-v2",
+  "dictionaryVersion": "swap-accepted-v3-0ddbc02adcc5",
+  "dictionaryWordsSha256": "0ddbc02adcc59f7a749f899c3610073f5c884b6997519558037df8bd72b07a57",
   "count": 730,
-  "requestedCount": 730,
-  "scrambleLength": 6,
-  "minimumAdmission": 4,
-  "maxStatesPerProposal": 200000,
-  "maxMillisecondsPerProposal": 10000,
-  "maxTotalMilliseconds": 90000,
-  "proposals": 752,
-  "rejections": {
-    "unverified": 0,
-    "tooEasy": 22,
-    "duplicate": 0
-  },
+  "start": "2026-09-20",
+  "end": "2028-09-18",
+  "corpusSha256": "d7f31fbe571fa5fb40d388a2f7ba2d43ba509995ddd08d66c5deec3cdb24e2e0",
+  "previousCorpusSha256": "9e2d86e6f9daf539cdb65d755eb4a29f34c024c5c9cb8c291e2dfd00107af0c2",
+  "retainedBoards": 707,
+  "replacements": [
+    {
+      "id": "2026-09-20",
+      "oldBoard": "OVICELOUSSMAGES",
+      "newBoard": "IPGARSUZZAHCEST"
+    },
+    {
+      "id": "2026-09-29",
+      "oldBoard": "CEHESGRSTSDUETS",
+      "newBoard": "RVNERHIUCEDAOSE"
+    },
+    {
+      "id": "2026-12-06",
+      "oldBoard": "UJCIEICGISGRANS",
+      "newBoard": "STIELCRRELFOUTA"
+    },
+    {
+      "id": "2026-12-15",
+      "oldBoard": "SPORESHPERATNOE",
+      "newBoard": "ESHUFGOAPLIMRGE"
+    },
+    {
+      "id": "2026-12-16",
+      "oldBoard": "RWESSCATERDESEN",
+      "newBoard": "OPAVLELSIEORART"
+    },
+    {
+      "id": "2027-01-04",
+      "oldBoard": "SHORNGOPITSRSAS",
+      "newBoard": "NAHGTMIIICPECEG"
+    },
+    {
+      "id": "2027-02-02",
+      "oldBoard": "AMTLSMOPERWAUEE",
+      "newBoard": "HCORMSTSREHAACK"
+    },
+    {
+      "id": "2027-02-16",
+      "oldBoard": "ZENNYSUBNASCREE",
+      "newBoard": "LBMOCMEALETUSIN"
+    },
+    {
+      "id": "2027-02-18",
+      "oldBoard": "STINTAPACKSNALI",
+      "newBoard": "OSAUTLCOSRFTARF"
+    },
+    {
+      "id": "2027-05-14",
+      "oldBoard": "RIVESHEOTRWRIUE",
+      "newBoard": "SEBRAZATAMWETRE"
+    },
+    {
+      "id": "2027-05-27",
+      "oldBoard": "BLECHPAUIPTAINT",
+      "newBoard": "PRITEEONENGMDAL"
+    },
+    {
+      "id": "2027-05-31",
+      "oldBoard": "HOERSTOBHTTAOLE",
+      "newBoard": "OHRSEPSEETWICEE"
+    },
+    {
+      "id": "2027-06-04",
+      "oldBoard": "RAIOIPADREBCRPK",
+      "newBoard": "TSOORSPOYNSROPT"
+    },
+    {
+      "id": "2027-07-15",
+      "oldBoard": "COOEDTLWURPINOT",
+      "newBoard": "NTAILOULIPSHRSE"
+    },
+    {
+      "id": "2027-10-10",
+      "oldBoard": "SORESHCNPESTMAE",
+      "newBoard": "LEPPYPUMCNABOEH"
+    },
+    {
+      "id": "2027-10-15",
+      "oldBoard": "CEARLMHETDSHITS",
+      "newBoard": "POUESHEATNHSILL"
+    },
+    {
+      "id": "2027-12-17",
+      "oldBoard": "TETRAMELTARFESH",
+      "newBoard": "VTEIMSOAAEPCECH"
+    },
+    {
+      "id": "2027-12-19",
+      "oldBoard": "PLNAEMLLTPAPACE",
+      "newBoard": "CIOGTNRWINOVHCE"
+    },
+    {
+      "id": "2028-01-03",
+      "oldBoard": "APEPRPSOLRRIVET",
+      "newBoard": "SHAEKWNAFLKNEIE"
+    },
+    {
+      "id": "2028-03-10",
+      "oldBoard": "SEEHPWHEALIRANY",
+      "newBoard": "SNIEFSIMRMKTOLE"
+    },
+    {
+      "id": "2028-05-19",
+      "oldBoard": "MSILRFLWOECROON",
+      "newBoard": "FAUOTPIIITORNNN"
+    },
+    {
+      "id": "2028-06-04",
+      "oldBoard": "ROANSWOOATMUMSE",
+      "newBoard": "WGASSCHEELRLUOD"
+    },
+    {
+      "id": "2028-06-15",
+      "oldBoard": "RICERDNVLEAAPPE",
+      "newBoard": "CUETTGAOFSKINSE"
+    }
+  ],
   "distribution": {
-    "4": 212,
-    "5": 96,
-    "6": 422
+    "3": 10,
+    "4": 214,
+    "5": 129,
+    "6": 377
   },
-  "corpusSha256": "9e2d86e6f9daf539cdb65d755eb4a29f34c024c5c9cb8c291e2dfd00107af0c2",
-  "admission": "Zero dictionary rows initially; no one-swap win; strict legal scramble witness; globally minimal solution proven across every admitted distinct-word triple and row order."
+  "initialStateLimit": 200000,
+  "retryStateLimit": 1000000,
+  "retriedIds": [
+    "2026-09-28",
+    "2026-12-09",
+    "2027-03-05",
+    "2027-04-12",
+    "2027-05-29",
+    "2027-06-12",
+    "2027-06-22",
+    "2027-06-29",
+    "2027-07-01",
+    "2027-07-22",
+    "2027-08-02",
+    "2027-08-25",
+    "2027-09-02",
+    "2027-10-13",
+    "2027-11-02",
+    "2027-11-24",
+    "2028-03-15",
+    "2028-03-16",
+    "2028-05-08",
+    "2028-05-13",
+    "2028-06-01",
+    "2028-09-13"
+  ],
+  "maxMillisecondsPerPuzzle": 10000,
+  "maxRetryMilliseconds": 60000
 }

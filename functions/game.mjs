@@ -29,9 +29,9 @@ const ranking = (counts, score, rankingAsOf) => ({
 
 /** db uses the Admin Firestore doc/runTransaction interface. Authentication belongs to the HTTP wrapper. */
 export function createGameService({ db, dictionary, dictionaryVersion, puzzles, now = Date.now, mode, validateReplay = validateSwapReplay }) {
-  if (mode !== undefined && mode !== 'swap-adjacent-v1') fail('INVALID_GAME_MODE');
-  const swap = mode === 'swap-adjacent-v1';
-  const days = swap ? 'swapAdjacentV1Days' : 'gameDays';
+  if (mode !== undefined && mode !== 'swap-adjacent-v2') fail('INVALID_GAME_MODE');
+  const swap = mode === 'swap-adjacent-v2';
+  const days = swap ? 'swapAdjacentV2Days' : 'gameDays';
   const metric = swap ? 'moves' : 'wordCount';
   const checkMode = input => { if (input?.mode !== mode) fail('INVALID_GAME_MODE'); };
   const manifest = new Map((puzzles instanceof Map ? [...puzzles.values()] : puzzles).map(puzzle => [puzzle.id, puzzle]));
@@ -156,8 +156,8 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
         || /[<>\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(input.reason)) fail('INVALID_REPORT_REASON');
       const player = createHash('sha256').update(uid).digest('hex');
       const id = createHash('sha256').update(JSON.stringify([puzzle.id, puzzle.dictionaryVersion, word, player])).digest('hex');
-      const report = db.doc(`${swap ? 'swapAdjacentV1WordReports' : 'wordReports'}/${id}`);
-      const limit = db.doc(`${swap ? 'swapAdjacentV1WordReportLimits' : 'wordReportLimits'}/${utcPuzzleId(now())}/players/${player}`);
+      const report = db.doc(`${swap ? 'swapAdjacentV2WordReports' : 'wordReports'}/${id}`);
+      const limit = db.doc(`${swap ? 'swapAdjacentV2WordReportLimits' : 'wordReportLimits'}/${utcPuzzleId(now())}/players/${player}`);
       return db.runTransaction(async transaction => {
         const existing = await transaction.get(report);
         if (existing.exists) return { received: true, status: 'pending', duplicate: true };

@@ -21,7 +21,7 @@ const allowedOrigins=new Set([...publicOrigins,...(emulator?['http://127.0.0.1:5
 const readJson=path=>JSON.parse(readFileSync(new URL(path,import.meta.url),'utf8'));
 let game, sponsors, stripe;
 function gameService(){
-  if(!game){const dictionary=readJson('../data/swap/words.json');game=createGameService({db,mode:'swap-adjacent-v1',dictionary:createSwapDictionary(dictionary.words),dictionaryVersion:dictionary.version,puzzles:readJson('../data/swap-adjacent/puzzles.json').map(puzzle=>({...puzzle,board:puzzle.letters}))});}
+  if(!game){const dictionary=readJson('../data/swap/words.json');game=createGameService({db,mode:'swap-adjacent-v2',dictionary:createSwapDictionary(dictionary.words),dictionaryVersion:dictionary.version,puzzles:readJson('../data/swap-adjacent/puzzles.json').map(puzzle=>({...puzzle,board:puzzle.letters}))});}
   return game;
 }
 function paymentServices(){
@@ -46,13 +46,13 @@ async function limit(req,route){
 const events=new Set(['puzzle_view','game_start','word_valid','word_invalid','puzzle_reset','puzzle_complete','share','theme_toggle','sponsor_open','checkout_start']);
 async function countEvent(name,uid,puzzleDay){
   if(!events.has(name))return;
-  const day=puzzleDay||new Date().toISOString().slice(0,10);const ref=db.doc(`swapAdjacentV1Analytics/${day}`);
+  const day=puzzleDay||new Date().toISOString().slice(0,10);const ref=db.doc(`swapAdjacentV2Analytics/${day}`);
   if(name==='game_start'||name==='puzzle_complete'){
-    const unique=db.doc(`swapAdjacentV1Analytics/${day}/dedup/${mac(`${name}:${uid}`)}`);
+    const unique=db.doc(`swapAdjacentV2Analytics/${day}/dedup/${mac(`${name}:${uid}`)}`);
     await db.runTransaction(async tx=>{if((await tx.get(unique)).exists)return;tx.set(unique,{event:name});tx.set(ref,{[name]:FieldValue.increment(1)},{merge:true});});
   }else await ref.set({[name]:FieldValue.increment(1)},{merge:true});
 }
-const messages={RATE_LIMITED:'Too many requests. Wait a minute and try again.',INVALID_PUZZLE_ID:'That puzzle date is not valid.',PUZZLE_NOT_AVAILABLE:'That puzzle is not available yet.',DICTIONARY_VERSION_MISMATCH:'The word list has changed. Refresh before submitting.',SESSION_NOT_FOUND:'Your session could not be verified. Reload and try again.',INVALID_SPONSOR_URL:'Enter a valid HTTPS website or X profile.',INVALID_SPONSOR_AMOUNT:'Choose a whole-dollar amount within the shown limits.',INVALID_SPONSOR_NAME:'Enter a name of up to 60 characters.'};
+const messages={RATE_LIMITED:'Too many requests. Wait a minute and try again.',INVALID_PUZZLE_ID:'That puzzle date is not valid.',PUZZLE_NOT_AVAILABLE:'That puzzle is not available yet.',INVALID_GAME_MODE:'Puzzle updated. Start fresh.',DICTIONARY_VERSION_MISMATCH:'Puzzle updated. Start fresh.',SESSION_NOT_FOUND:'Your session could not be verified. Reload and try again.',INVALID_SPONSOR_URL:'Enter a valid HTTPS website or X profile.',INVALID_SPONSOR_AMOUNT:'Choose a whole-dollar amount within the shown limits.',INVALID_SPONSOR_NAME:'Enter a name of up to 60 characters.'};
 
 async function handleRequest(req,res,payment=false){
   res.set('Cache-Control','private, no-store');res.set('X-Content-Type-Options','nosniff');
@@ -81,7 +81,7 @@ async function handleRequest(req,res,payment=false){
     if(route==='result'&&req.method==='POST'){const result=await game.submitResult(uid,req.body);await countEvent('puzzle_complete',uid,result.puzzleId);res.json(result);return;}
     if(route==='report'&&req.method==='POST'){res.json(await game.reportWord(uid,req.body));return;}
     if(route==='checkout'&&req.method==='POST'){const requestOrigin=req.get('origin');const returnOrigin=publicOrigins.includes(requestOrigin)?requestOrigin:origin;const result=await sponsors.checkout(uid,req.body,returnOrigin);await countEvent('checkout_start',uid);res.json(result);return;}
-    if(route==='event'&&req.method==='POST'){if(req.body?.mode!=='swap-adjacent-v1'||!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
+    if(route==='event'&&req.method==='POST'){if(req.body?.mode!=='swap-adjacent-v2'||!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
     res.status(404).json({error:'Not found.'});
   }catch(error){const known=error instanceof GameError||error instanceof SponsorError;console.error(JSON.stringify({event:'api_error',route,code:known?error.code:'INTERNAL'}));res.status(known?error.status:503).json({error:messages[error.code]||(known?'That request could not be accepted. Check your input and try again.':'Jumble could not connect. Please try again.'),code:known?error.code:'UNAVAILABLE'});}
 }

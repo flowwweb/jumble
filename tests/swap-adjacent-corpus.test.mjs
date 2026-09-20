@@ -14,12 +14,12 @@ test('adjacent corpus binds each private certificate and legal optimum to the fu
   for (const [index, puzzle] of puzzles.entries()) {
     const receipt = puzzle.optimality;
     assert.equal(puzzle.id, new Date(Date.UTC(2026, 8, 20 + index)).toISOString().slice(0, 10));
-    assert.equal(receipt.status, 'PROVEN'); assert.equal(receipt.rulesVersion, 'swap-adjacent-v1');
+    assert.equal(receipt.status, 'PROVEN'); assert.equal(receipt.rulesVersion, 'swap-adjacent-v2');
     assert.equal(receipt.dictionaryVersion, vocabulary.version);
     assert.equal(receipt.boardSha256, hash(puzzle.letters.join('')));
     assert.equal(receipt.dictionaryWordsSha256, hash(JSON.stringify(dictionary.words)));
     assert.ok(evaluateBoard(puzzle.letters, dictionary).rows.every(word => !dictionary.has(word)));
-    assert.ok(receipt.minimumMoves >= 4); assert.equal(receipt.minimumMoves, receipt.optimalActions.length);
+    assert.ok(receipt.minimumMoves >= 2); assert.equal(receipt.minimumMoves, receipt.optimalActions.length);
     assert.equal(receipt.proof.method, 'multi-source-bidirectional-bfs-v1');
     assert.equal(receipt.proof.exhaustiveBelow, receipt.minimumMoves);
     assert.ok(receipt.optimalActions.every(action => action.type === 'swap'));

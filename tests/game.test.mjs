@@ -20,7 +20,7 @@ function fixture(swap = false, optimality) {
   } };
   const dictionary = swap ? createSwapDictionary(['apple', 'table', 'chair']) : createDictionary(['apple', 'table', 'chair', 'appletable']);
   const game = createGameService({ db, dictionary, dictionaryVersion: 'test-v1', now: () => time,
-    ...(swap ? {mode:'swap-adjacent-v1'} : {}),
+    ...(swap ? {mode:'swap-adjacent-v2'} : {}),
     puzzles: ['2026-09-18', '2026-09-19', '2026-09-20'].map(id => ({ id, letters: 'appletablechair', board: [...'papletablechair'], dictionaryVersion: 'test-v1', minimum: 2, optimality })) });
   return { game, dictionary, records, advance: milliseconds => { time += milliseconds; } };
 }
@@ -29,7 +29,7 @@ const report = (changes = {}) => ({ puzzleId: '2026-09-19', dictionaryVersion: '
 
 test('SWAP replay counts forward swaps through undo/reset and preserves one authoritative best', async () => {
   const {game, records, advance} = fixture(true);
-  const context = {puzzleId:'2026-09-19',mode:'swap-adjacent-v1',dictionaryVersion:'test-v1'};
+  const context = {puzzleId:'2026-09-19',mode:'swap-adjacent-v2',dictionaryVersion:'test-v1'};
   assert.deepEqual(Object.keys(game.getPuzzle()), ['id','mode','board','dictionaryVersion']);
   const session = await game.startSession(uid,context);
   const finish = {type:'swap',from:0,to:1};
@@ -46,7 +46,7 @@ test('SWAP replay counts forward swaps through undo/reset and preserves one auth
   assert.equal(best.elapsedMs,5000); assert.equal(best.firstCompletedAt,first.completedAt);
   assert.deepEqual(await submit([extra,{type:'undo'},finish]),best);
   assert.equal((await game.startSession(uid,context)).startedAt,session.startedAt);
-  assert.ok([...records.keys()].every(path=>path.startsWith('swapAdjacentV1Days/')));
+  assert.ok([...records.keys()].every(path=>path.startsWith('swapAdjacentV2Days/')));
   const second = await game.startSession('second-anonymous-user',context);
   const tied = await game.submitResult('second-anonymous-user',{...context,sessionId:second.sessionId,actions:[finish]});
   assert.equal(tied.tied,2); assert.equal(tied.rank,1); assert.equal(tied.total,2);
@@ -54,7 +54,7 @@ test('SWAP replay counts forward swaps through undo/reset and preserves one auth
 
 test('SWAP accepted retries refresh current ranks without mutating best result or participant counts', async () => {
   const {game,records,advance}=fixture(true);
-  const context={puzzleId:'2026-09-19',mode:'swap-adjacent-v1',dictionaryVersion:'test-v1'};
+  const context={puzzleId:'2026-09-19',mode:'swap-adjacent-v2',dictionaryVersion:'test-v1'};
   const finish={type:'swap',from:0,to:1},extra={type:'swap',from:5,to:6};
   const slow=[extra,{type:'undo'},finish],fast=[finish];
   const session=await game.startSession(uid,context);
@@ -76,7 +76,7 @@ test('SWAP accepted retries refresh current ranks without mutating best result o
   assert.deepEqual([...records],before);
   const improved=await submit(fast);
   assert.equal(improved.rank,1);assert.equal(improved.total,3);assert.equal(improved.tied,2);
-  assert.deepEqual(records.get('swapAdjacentV1Days/2026-09-19').counts,{1:2,2:1});
+  assert.deepEqual(records.get('swapAdjacentV2Days/2026-09-19').counts,{1:2,2:1});
   advance(1000);
   const refreshed=await submit(slow);
   assert.equal(refreshed.moves,1);assert.equal(refreshed.rank,1);assert.equal(refreshed.total,3);
@@ -86,11 +86,11 @@ test('SWAP accepted retries refresh current ranks without mutating best result o
 
 test('optimal solution appears only after completion with an exact bound trusted receipt and legal witness', async () => {
   const hash=text=>createHash('sha256').update(text).digest('hex');
-  const receipt={status:'PROVEN',rulesVersion:'swap-adjacent-v1',dictionaryVersion:'test-v1',
+  const receipt={status:'PROVEN',rulesVersion:'swap-adjacent-v2',dictionaryVersion:'test-v1',
     boardSha256:hash('PAPLETABLECHAIR'),dictionaryWordsSha256:hash(JSON.stringify(['apple','chair','table'])),
     minimumMoves:1,optimalActions:[{type:'swap',from:0,to:1}],optimalWords:['apple','table','chair'],
     proof:{method:'multi-source-bidirectional-bfs-v1',exhaustiveBelow:1}};
-  const context={puzzleId:'2026-09-19',mode:'swap-adjacent-v1',dictionaryVersion:'test-v1'};
+  const context={puzzleId:'2026-09-19',mode:'swap-adjacent-v2',dictionaryVersion:'test-v1'};
   const {game}=fixture(true,receipt);
   assert.deepEqual(Object.keys(game.getPuzzle()),['id','mode','board','dictionaryVersion']);
   const session=await game.startSession(uid,context);
@@ -110,9 +110,32 @@ test('optimal solution appears only after completion with an exact bound trusted
   }
 });
 
+test('adjacent v2 ignores prior sessions/results and leaves every v1 record untouched', async () => {
+  const {game,records}=fixture(true);
+  const player=createHash('sha256').update(uid).digest('hex');
+  const prior=[
+    [`swapAdjacentV1Days/2026-09-19/sessions/${player}`,{sessionId:'old-session',puzzleId:'2026-09-19',startedAt:1}],
+    [`swapAdjacentV1Days/2026-09-19/results/${player}`,{moves:1,total:99}],
+    ['swapAdjacentV1Days/2026-09-19',{counts:{1:99}}],
+    ['swapAdjacentV1Analytics/2026-09-19',{puzzle_complete:99}],
+    ['swapAdjacentV1WordReports/retained',{status:'pending'}],
+  ];
+  for(const [path,value] of prior)records.set(path,structuredClone(value));
+  const context={puzzleId:'2026-09-19',mode:'swap-adjacent-v2',dictionaryVersion:'test-v1'};
+  await assert.rejects(game.startSession(uid,{...context,mode:'swap-adjacent-v1'}),{code:'INVALID_GAME_MODE'});
+  const session=await game.startSession(uid,context);
+  assert.notEqual(session.sessionId,'old-session');
+  const input={...context,sessionId:session.sessionId,actions:[{type:'swap',from:0,to:1}]};
+  await assert.rejects(game.submitResult(uid,{...input,sessionId:'old-session'}),{code:'SESSION_NOT_FOUND'});
+  await assert.rejects(game.submitResult(uid,{...input,mode:'swap-adjacent-v1'}),{code:'INVALID_GAME_MODE'});
+  const result=await game.submitResult(uid,input);
+  assert.equal(result.total,1);assert.equal(result.rank,1);
+  for(const [path,value] of prior)assert.deepEqual(records.get(path),value);
+});
+
 test('SWAP rejects legacy/version/session forgery, unsolved and terminal trailing replay', async () => {
   const {game,records} = fixture(true);
-  const context = {puzzleId:'2026-09-19',mode:'swap-adjacent-v1',dictionaryVersion:'test-v1'};
+  const context = {puzzleId:'2026-09-19',mode:'swap-adjacent-v2',dictionaryVersion:'test-v1'};
   const session = await game.startSession(uid,context);
   const finish = {type:'swap',from:0,to:1};
   const input = {...context,sessionId:session.sessionId,actions:[finish]};
