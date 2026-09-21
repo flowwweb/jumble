@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { validatePartition, utcPuzzleId } from '../engine/index.mjs';
 import { replaySwapSession } from '../engine/swap.mjs';
+import { replayBlankSession, normalizeBlankBoard } from '../engine/swap-blank.mjs';
 
-export function validateSwapReplay(board, actions, dictionary) {
+export function validateSwapReplay(board, actions, dictionary, mode) {
   try {
     for (const action of actions) {
       if (!action || typeof action !== 'object' || Array.isArray(action)) throw new TypeError();
@@ -10,8 +11,8 @@ export function validateSwapReplay(board, actions, dictionary) {
       if (Object.keys(action).some(key => !keys.includes(key))) throw new TypeError();
       if (action.type === 'swap' && (!Number.isInteger(action.from) || !Number.isInteger(action.to))) throw new TypeError();
     }
-    const result = replaySwapSession(board, actions, dictionary);
-    return { valid: result.won, code: 'BOARD_NOT_SOLVED', words: result.rows, board: result.board, moves: result.moves };
+    const result = mode === 'swap-blank-v1' ? replayBlankSession(board, actions, dictionary) : replaySwapSession(board, actions, dictionary);
+    return { valid: result.won, code: 'BOARD_NOT_SOLVED', words: result.words ?? result.rows, board: result.board, moves: result.moves };
   } catch { return { valid: false, code: 'INVALID_ACTION' }; }
 }
 
@@ -29,12 +30,17 @@ const ranking = (counts, score, rankingAsOf) => ({
 
 /** db uses the Admin Firestore doc/runTransaction interface. Authentication belongs to the HTTP wrapper. */
 export function createGameService({ db, dictionary, dictionaryVersion, puzzles, now = Date.now, mode, validateReplay = validateSwapReplay }) {
-  if (mode !== undefined && mode !== 'swap-adjacent-v3') fail('INVALID_GAME_MODE');
-  const swap = mode === 'swap-adjacent-v3';
-  const days = swap ? 'swapAdjacentV3Days' : 'gameDays';
+  if (mode !== undefined && !['swap-adjacent-v3','swap-blank-v1'].includes(mode)) fail('INVALID_GAME_MODE');
+  const blank = mode === 'swap-blank-v1';
+  const swap = mode !== undefined;
+  const prefix = blank ? 'swapBlankV1' : 'swapAdjacentV3';
+  const days = swap ? `${prefix}Days` : 'gameDays';
   const metric = swap ? 'moves' : 'wordCount';
   const checkMode = input => { if (input?.mode !== mode) fail('INVALID_GAME_MODE'); };
   const manifest = new Map((puzzles instanceof Map ? [...puzzles.values()] : puzzles).map(puzzle => [puzzle.id, puzzle]));
+  if (blank) for (const puzzle of manifest.values()) {
+    if (puzzle.rulesVersion !== mode || normalizeBlankBoard(puzzle.board).filter(tile => tile === ' ').length !== 1) fail('INVALID_BLANK_PUZZLE',503);
+  }
   const sha256 = value => createHash('sha256').update(value).digest('hex');
   const dictionaryHash = swap ? sha256(JSON.stringify([...new Set(dictionary.words.map(word => word.toLowerCase()))].sort())) : null;
   const optimal = new Map();
@@ -46,10 +52,10 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
       || receipt.dictionaryVersion !== dictionaryVersion || receipt.dictionaryWordsSha256 !== dictionaryHash
       || receipt.boardSha256 !== sha256([...puzzle.board].join('').toUpperCase())
       || !Number.isInteger(receipt.minimumMoves) || receipt.minimumMoves < 0 || receipt.minimumMoves > 1000
-      || receipt.proof?.method !== 'multi-source-bidirectional-bfs-v1' || receipt.proof.exhaustiveBelow !== receipt.minimumMoves
+      || receipt.proof?.method !== (blank ? 'forward-board-bfs-v1' : 'multi-source-bidirectional-bfs-v1') || receipt.proof.exhaustiveBelow !== receipt.minimumMoves
       || !Array.isArray(receipt.optimalActions) || receipt.optimalActions.length !== receipt.minimumMoves
       || receipt.optimalActions.some(action => action?.type !== 'swap')) continue;
-    const replay = validateSwapReplay(puzzle.board, receipt.optimalActions, dictionary);
+    const replay = validateReplay(puzzle.board, receipt.optimalActions, dictionary, mode);
     if (replay.valid && replay.moves === receipt.minimumMoves && JSON.stringify(replay.words) === JSON.stringify(receipt.optimalWords)) {
       optimal.set(puzzle.id, {moves:receipt.minimumMoves,actions:structuredClone(receipt.optimalActions),words:[...replay.words]});
     }
@@ -101,7 +107,7 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
       let validated;
       if (swap) {
         if (!Array.isArray(input.actions) || input.actions.length > 1000) fail('INVALID_ACTIONS');
-        validated = validateReplay(puzzle.board, input.actions, dictionary);
+        validated = validateReplay(puzzle.board, input.actions, dictionary, mode);
       } else validated = validatePartition(puzzle.letters, input.words, dictionary);
       if (!validated.valid) fail(validated.code);
       const refs = references(uid, puzzle.id);
@@ -144,7 +150,7 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
       if (input.dictionaryVersion !== puzzle.dictionaryVersion) fail('DICTIONARY_VERSION_MISMATCH', 409);
       if (typeof input.word !== 'string' || !/^[a-z]{1,15}$/i.test(input.word)) fail('INVALID_REPORT_WORD');
       const word = input.word.toLowerCase();
-      if (swap && word.length !== 5) fail('INVALID_REPORT_WORD');
+      if (blank ? word.length > 5 || (word.length === 1 && !['a','i'].includes(word)) : swap && word.length !== 5) fail('INVALID_REPORT_WORD');
       if (dictionary.has(word)) fail('WORD_ALREADY_ACCEPTED', 409);
       const letters = [...(swap ? puzzle.board : puzzle.letters)].map(letter => letter.toLowerCase());
       for (const letter of word) {
@@ -156,8 +162,8 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
         || /[<>\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(input.reason)) fail('INVALID_REPORT_REASON');
       const player = createHash('sha256').update(uid).digest('hex');
       const id = createHash('sha256').update(JSON.stringify([puzzle.id, puzzle.dictionaryVersion, word, player])).digest('hex');
-      const report = db.doc(`${swap ? 'swapAdjacentV3WordReports' : 'wordReports'}/${id}`);
-      const limit = db.doc(`${swap ? 'swapAdjacentV3WordReportLimits' : 'wordReportLimits'}/${utcPuzzleId(now())}/players/${player}`);
+      const report = db.doc(`${swap ? `${prefix}WordReports` : 'wordReports'}/${id}`);
+      const limit = db.doc(`${swap ? `${prefix}WordReportLimits` : 'wordReportLimits'}/${utcPuzzleId(now())}/players/${player}`);
       return db.runTransaction(async transaction => {
         const existing = await transaction.get(report);
         if (existing.exists) return { received: true, status: 'pending', duplicate: true };

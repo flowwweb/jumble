@@ -15,3 +15,5 @@ data/dictionary/upstream/
 .cache/
 .secret.local
 functions.yaml
+
+data/swap-blank/puzzles.json

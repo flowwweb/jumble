@@ -59,19 +59,28 @@ export function createSponsorService({ db, stripe, origin, allowedReturnOrigins 
   const listings = db.collection(prefix);
 
   return {
-    async list() {
+    async list(requestedUrl) {
+      const normalizedUrl = requestedUrl === undefined ? undefined : sponsorUrl(requestedUrl);
       const snapshot = await listings.orderBy('cents', 'desc').get();
       const entries = snapshot.docs.map(doc => doc.data());
       const rows = entries.filter(row => row.cents > 0 && !row.hidden)
         .map(({ name, url, cents }) => ({ name, url, cents }))
         .sort((a, b) => b.cents - a.cents || (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
-      return { rows, total: rows.length, totalCents: entries.reduce((sum, row) => sum + row.cents, 0), topCents: entries[0]?.cents ?? 0 };
+      rows.forEach((row, index) => { row.rank = index > 0 && rows[index - 1].cents === row.cents ? rows[index - 1].rank : index + 1; });
+      const topCents = entries[0]?.cents ?? 0;
+      const result = { rows, total: rows.length, totalCents: entries.reduce((sum, row) => sum + row.cents, 0), topCents };
+      if (normalizedUrl !== undefined) {
+        const current = entries.find(row => row.url === normalizedUrl)?.cents ?? 0;
+        try { result.takeoverCents = checkoutCents('takeover', topCents, current); }
+        catch (error) { if (error instanceof SponsorError && error.code === 'INVALID_SPONSOR_AMOUNT') fail('TAKEOVER_LIMIT_EXCEEDED'); throw error; }
+      }
+      return result;
     },
 
     async checkout(uid, input, requestOrigin = site.origin) {
       if (!returnOrigins.has(requestOrigin)) fail('INVALID_RETURN_ORIGIN', 403);
       const payload = parseSubmission(uid, input);
-      if (input.gameMode !== undefined && input.gameMode !== 'swap-adjacent-v3') fail('INVALID_RETURN_CONTEXT');
+      if (input.gameMode !== undefined && !['swap-adjacent-v3','swap-blank-v1'].includes(input.gameMode)) fail('INVALID_RETURN_CONTEXT');
       if (input.gameMode !== undefined) payload.gameMode = input.gameMode;
       if (input.returnTo !== undefined && !['entry', 'result'].includes(input.returnTo)) fail('INVALID_RETURN_CONTEXT');
       if (input.puzzleId !== undefined) {

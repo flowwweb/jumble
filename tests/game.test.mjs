@@ -4,6 +4,9 @@ import { createGameService } from '../functions/game.mjs';
 import { createDictionary } from '../engine/index.mjs';
 import { createSwapDictionary } from '../engine/swap.mjs';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createBlankDictionary } from '../engine/swap-blank.mjs';
+import { createDailyService } from '../functions/daily.mjs';
 
 function fixture(swap = false, optimality) {
   const records = new Map();
@@ -26,6 +29,54 @@ function fixture(swap = false, optimality) {
 }
 const uid = 'anonymous-report-player';
 const report = (changes = {}) => ({ puzzleId: '2026-09-19', dictionaryVersion: 'test-v1', word: 'plate', reason: 'Common English noun', ...changes });
+
+test('date routing switches Sep23/24/25, isolates one-blank results, reports and private proof', async () => {
+  const records=new Map();
+  const db={doc:path=>path,runTransaction:async work=>{
+    const writes=new Map();const result=await work({get:async path=>({exists:records.has(path),data:()=>structuredClone(records.get(path))}),set:(path,value)=>writes.set(path,structuredClone(value))});
+    for(const [path,value] of writes)records.set(path,value);return result;
+  }};
+  const read=path=>JSON.parse(readFileSync(new URL(path,import.meta.url),'utf8'));
+  const words=read('../data/swap-blank/words.json'),puzzles=read('../data/swap-blank/puzzles.json');
+  let time=Date.parse('2026-09-23T23:59:59Z');const now=()=>time;
+  const normal=createGameService({db,now,mode:'swap-adjacent-v3',dictionary:createSwapDictionary(['apple','table','chair']),dictionaryVersion:'normal-test',
+    puzzles:['2026-09-23','2026-09-24','2026-09-25'].map(id=>({id,board:[...'papletablechair'],dictionaryVersion:'normal-test'}))});
+  const options={db,now,mode:'swap-blank-v1',dictionary:createBlankDictionary(words.words),dictionaryVersion:words.version,puzzles:puzzles.map(p=>({...p,board:p.letters}))};
+  const blank=createGameService(options),daily=createDailyService({normal,blank,blankDays:puzzles.map(p=>p.id),now});
+  assert.equal(daily.getPuzzle().mode,'swap-adjacent-v3');
+  assert.throws(()=>daily.getPuzzle('2026-09-24'),{code:'PUZZLE_NOT_AVAILABLE'});
+  const normalSession=await daily.startSession(uid,{puzzleId:'2026-09-23',mode:'swap-adjacent-v3'});
+  const normalBefore=structuredClone([...records]);
+  time+=1000;
+  const publicPuzzle=daily.getPuzzle();assert.equal(publicPuzzle.mode,'swap-blank-v1');
+  assert.throws(()=>daily.getPuzzle('2026-09-24','swap-adjacent-v3'),{code:'INVALID_GAME_MODE'});
+  assert.deepEqual(Object.keys(publicPuzzle),['id','mode','board','dictionaryVersion']);
+  const context={puzzleId:'2026-09-24',mode:'swap-blank-v1',dictionaryVersion:words.version};
+  await assert.rejects(daily.startSession(uid,{...context,mode:'swap-adjacent-v3'}),{code:'INVALID_GAME_MODE'});
+  const session=await daily.startSession(uid,context);assert.equal('optimal' in session,false);
+  const input={...context,sessionId:session.sessionId,actions:puzzles[0].optimality.optimalActions};
+  await assert.rejects(daily.submitResult(uid,{...input,sessionId:normalSession.sessionId}),{code:'SESSION_NOT_FOUND'});
+  const result=await daily.submitResult(uid,input);
+  assert.deepEqual(result.words,puzzles[0].optimality.optimalWords);assert.equal(result.words.length,4);assert.equal(result.optimal.moves,3);assert.equal(result.total,1);
+  assert.equal((await daily.submitResult(uid,input)).total,1);
+  for(const [path,value] of normalBefore)assert.deepEqual(records.get(path),value);
+  assert.ok([...records.keys()].some(path=>path.startsWith('swapBlankV1Days/')));
+  const report=word=>({...context,word,reason:'Please review this word.'});
+  await assert.rejects(daily.reportWord(uid,report('in')),{code:'WORD_ALREADY_ACCEPTED'});
+  for(const word of ['b','abcdef','zz'])await assert.rejects(daily.reportWord(uid,report(word)));
+  assert.equal((await daily.reportWord(uid,report('bd'))).status,'pending');
+  assert.equal((await daily.reportWord(uid,report('BD'))).duplicate,true);
+  const unaccepted=['bn','bt','bc','bl','br','nd','nb','nr','nl','nt'].filter(word=>!words.words.includes(word));
+  for(const word of unaccepted.slice(0,4))await daily.reportWord(uid,report(word));
+  await assert.rejects(daily.reportWord(uid,report(unaccepted[4])),{code:'REPORT_RATE_LIMITED'});
+  assert.ok([...records.keys()].some(path=>path.startsWith('swapBlankV1WordReports/')));
+  const badReceipt={...puzzles[0].optimality,proof:{...puzzles[0].optimality.proof,method:'multi-source-bidirectional-bfs-v1'}};
+  const noProof=createGameService({...options,puzzles:[{...puzzles[0],board:puzzles[0].letters,optimality:badReceipt}]});
+  assert.equal('optimal' in await noProof.submitResult(uid,input),false);
+  assert.throws(()=>createGameService({...options,puzzles:[{...puzzles[0],board:[...'  CATCRANEBRICK']}]}),{code:'INVALID_BLANK_PUZZLE'});
+  time=Date.parse('2026-09-25T00:00:00Z');assert.equal(daily.getPuzzle().mode,'swap-adjacent-v3');
+  assert.equal(daily.getPuzzle('2026-09-24').mode,'swap-blank-v1');
+});
 
 test('SWAP replay counts forward swaps through undo/reset and preserves one authoritative best', async () => {
   const {game, records, advance} = fixture(true);

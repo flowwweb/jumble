@@ -1,0 +1,172 @@
+{
+  "dictionaryVersion": "product-blank-prototype-esdb70-396b3eafd38a",
+  "fixtures": [
+    {
+      "id": "edge",
+      "board": [
+        " ",
+        "A",
+        "I",
+        "O",
+        "N",
+        "W",
+        "R",
+        "E",
+        "E",
+        "R",
+        "B",
+        "L",
+        "T",
+        "A",
+        "D"
+      ],
+      "dictionaryVersion": "product-blank-prototype-esdb70-396b3eafd38a",
+      "seed": " LIONWATERBREAD",
+      "proof": {
+        "status": "PROVEN",
+        "minimum": 3,
+        "solution": [
+          {
+            "from": 6,
+            "to": 11
+          },
+          {
+            "from": 1,
+            "to": 6
+          },
+          {
+            "from": 7,
+            "to": 12
+          }
+        ],
+        "words": [
+          "lion",
+          "water",
+          "bread"
+        ],
+        "certificate": {
+          "rulesVersion": "swap-blank-v1",
+          "boardSha256": "d254e9ebcfcd7e40ce35895a74cf2f0701781bdb69fd14f98f9b1bba913bbf26",
+          "dictionaryWordsSha256": "396b3eafd38ad2acd2747c3a8de85245c2eb459558c0ffc1c7426aee0333ff7c",
+          "method": "forward-board-bfs-v1",
+          "exhaustiveBelow": 3,
+          "discoveredStates": 17528,
+          "evaluatedStates": 2243,
+          "elapsedMs": 417.2779
+        }
+      }
+    },
+    {
+      "id": "split",
+      "board": [
+        "T",
+        "L",
+        " ",
+        "G",
+        "T",
+        "P",
+        "O",
+        "A",
+        "S",
+        "O",
+        "M",
+        "O",
+        "U",
+        "N",
+        "E"
+      ],
+      "dictionaryVersion": "product-blank-prototype-esdb70-396b3eafd38a",
+      "seed": "TO GOPLANTMOUSE",
+      "proof": {
+        "status": "PROVEN",
+        "minimum": 3,
+        "solution": [
+          {
+            "from": 1,
+            "to": 6
+          },
+          {
+            "from": 4,
+            "to": 9
+          },
+          {
+            "from": 8,
+            "to": 13
+          }
+        ],
+        "words": [
+          "to",
+          "go",
+          "plant",
+          "mouse"
+        ],
+        "certificate": {
+          "rulesVersion": "swap-blank-v1",
+          "boardSha256": "519d97907702629b9cfbddfdd8f92a225a882d51e391adb9158c41fc20241bde",
+          "dictionaryWordsSha256": "396b3eafd38ad2acd2747c3a8de85245c2eb459558c0ffc1c7426aee0333ff7c",
+          "method": "forward-board-bfs-v1",
+          "exhaustiveBelow": 3,
+          "discoveredStates": 9478,
+          "evaluatedStates": 1071,
+          "elapsedMs": 149.30280000000005
+        }
+      }
+    },
+    {
+      "id": "moving-blank",
+      "board": [
+        "T",
+        " ",
+        "O",
+        "N",
+        "O",
+        "P",
+        "L",
+        "A",
+        "G",
+        "T",
+        "M",
+        "O",
+        "S",
+        "U",
+        "E"
+      ],
+      "dictionaryVersion": "product-blank-prototype-esdb70-396b3eafd38a",
+      "seed": "TO GOPLANTMOUSE",
+      "proof": {
+        "status": "PROVEN",
+        "minimum": 3,
+        "solution": [
+          {
+            "from": 1,
+            "to": 2
+          },
+          {
+            "from": 3,
+            "to": 8
+          },
+          {
+            "from": 12,
+            "to": 13
+          }
+        ],
+        "words": [
+          "to",
+          "go",
+          "plant",
+          "mouse"
+        ],
+        "certificate": {
+          "rulesVersion": "swap-blank-v1",
+          "boardSha256": "550739fc4d4f17fced298bbdf37e0864073109d4f37cb679fbb53ac340dd6554",
+          "dictionaryWordsSha256": "396b3eafd38ad2acd2747c3a8de85245c2eb459558c0ffc1c7426aee0333ff7c",
+          "method": "forward-board-bfs-v1",
+          "exhaustiveBelow": 3,
+          "discoveredStates": 8269,
+          "evaluatedStates": 906,
+          "elapsedMs": 72.02829999999994
+        }
+      }
+    }
+  ]
+}

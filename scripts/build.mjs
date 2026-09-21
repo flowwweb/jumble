@@ -7,6 +7,7 @@ if(result.status!==0)process.exit(result.status||1);
 await cp('public','dist',{recursive:true});
 await mkdir('dist/engine',{recursive:true});
 await cp('engine/swap.mjs','dist/engine/swap.mjs');
+await cp('engine/swap-blank.mjs','dist/engine/swap-blank.mjs');
 await cp('src/style.css','dist/src/style.css');
 await writeFile('dist/index.html',(await readFile('index.html','utf8')).replace('/src/app.mjs','/src/app.js'));
 console.log('Built Jumble into dist/');

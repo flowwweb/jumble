@@ -6,6 +6,8 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import Stripe from 'stripe';
 import { createSwapDictionary } from '../engine/swap.mjs';
+import { createBlankDictionary } from '../engine/swap-blank.mjs';
+import { createDailyService } from './daily.mjs';
 import { createGameService, GameError } from './game.mjs';
 import { createSponsorService, SponsorError } from './sponsors.mjs';
 
@@ -21,7 +23,13 @@ const allowedOrigins=new Set([...publicOrigins,...(emulator?['http://127.0.0.1:5
 const readJson=path=>JSON.parse(readFileSync(new URL(path,import.meta.url),'utf8'));
 let game, sponsors, stripe;
 function gameService(){
-  if(!game){const dictionary=readJson('../data/swap/words.json');game=createGameService({db,mode:'swap-adjacent-v3',dictionary:createSwapDictionary(dictionary.words),dictionaryVersion:dictionary.version,puzzles:readJson('../data/swap-adjacent/puzzles.json').map(puzzle=>({...puzzle,board:puzzle.letters}))});}
+  if(!game){
+    const dictionary=readJson('../data/swap/words.json'),blankDictionary=readJson('../data/swap-blank/words.json');
+    const blankPuzzles=readJson('../data/swap-blank/puzzles.json');
+    const normal=createGameService({db,mode:'swap-adjacent-v3',dictionary:createSwapDictionary(dictionary.words),dictionaryVersion:dictionary.version,puzzles:readJson('../data/swap-adjacent/puzzles.json').map(puzzle=>({...puzzle,board:puzzle.letters}))});
+    const blank=createGameService({db,mode:'swap-blank-v1',dictionary:createBlankDictionary(blankDictionary.words),dictionaryVersion:blankDictionary.version,puzzles:blankPuzzles.map(puzzle=>({...puzzle,board:puzzle.letters}))});
+    game=createDailyService({normal,blank,blankDays:blankPuzzles.map(puzzle=>puzzle.id)});
+  }
   return game;
 }
 function paymentServices(){
@@ -46,13 +54,15 @@ async function limit(req,route){
 const events=new Set(['puzzle_view','game_start','word_valid','word_invalid','puzzle_reset','puzzle_complete','share','theme_toggle','sponsor_open','checkout_start']);
 async function countEvent(name,uid,puzzleDay){
   if(!events.has(name))return;
-  const day=puzzleDay||new Date().toISOString().slice(0,10);const ref=db.doc(`swapAdjacentV3Analytics/${day}`);
+  const puzzle=gameService().getPuzzle(puzzleDay),day=puzzle.id;
+  const collection=puzzle.mode==='swap-blank-v1'?'swapBlankV1Analytics':'swapAdjacentV3Analytics';
+  const ref=db.doc(`${collection}/${day}`);
   if(name==='game_start'||name==='puzzle_complete'){
-    const unique=db.doc(`swapAdjacentV3Analytics/${day}/dedup/${mac(`${name}:${uid}`)}`);
+    const unique=db.doc(`${collection}/${day}/dedup/${mac(`${name}:${uid}`)}`);
     await db.runTransaction(async tx=>{if((await tx.get(unique)).exists)return;tx.set(unique,{event:name});tx.set(ref,{[name]:FieldValue.increment(1)},{merge:true});});
   }else await ref.set({[name]:FieldValue.increment(1)},{merge:true});
 }
-const messages={RATE_LIMITED:'Too many requests. Wait a minute and try again.',INVALID_PUZZLE_ID:'That puzzle date is not valid.',PUZZLE_NOT_AVAILABLE:'That puzzle is not available yet.',WORD_ALREADY_ACCEPTED:'That word is already accepted. Try it on the board.',REPORT_WORD_NOT_IN_PUZZLE:'That word needs letters outside this puzzle.',REPORT_RATE_LIMITED:'You have reported five words today. Try again tomorrow.',INVALID_REPORT_WORD:'Enter a five-letter word.',INVALID_REPORT_REASON:'Briefly explain the missing word using plain text.',INVALID_GAME_MODE:'Puzzle updated. Start fresh.',DICTIONARY_VERSION_MISMATCH:'Puzzle updated. Start fresh.',SESSION_NOT_FOUND:'Your session could not be verified. Reload and try again.',INVALID_SPONSOR_URL:'Enter a valid HTTPS website or X profile.',INVALID_SPONSOR_AMOUNT:'Choose a whole-dollar amount within the shown limits.',INVALID_SPONSOR_NAME:'Enter a name of up to 60 characters.'};
+const messages={RATE_LIMITED:'Too many requests. Wait a minute and try again.',INVALID_PUZZLE_ID:'That puzzle date is not valid.',PUZZLE_NOT_AVAILABLE:'That puzzle is not available yet.',WORD_ALREADY_ACCEPTED:'That word is already accepted. Try it on the board.',REPORT_WORD_NOT_IN_PUZZLE:'That word needs letters outside this puzzle.',REPORT_RATE_LIMITED:'You have reported five words today. Try again tomorrow.',INVALID_REPORT_WORD:'Enter a word with a length allowed for this puzzle.',INVALID_REPORT_REASON:'Briefly explain the missing word using plain text.',INVALID_GAME_MODE:'Puzzle updated. Start fresh.',DICTIONARY_VERSION_MISMATCH:'Puzzle updated. Start fresh.',SESSION_NOT_FOUND:'Your session could not be verified. Reload and try again.',INVALID_SPONSOR_URL:'Enter a valid HTTPS website or X profile.',TAKEOVER_LIMIT_EXCEEDED:'The amount needed for #1 exceeds the $10,000 limit. Join the wall instead.',INVALID_SPONSOR_AMOUNT:'Choose a whole-dollar amount within the shown limits.',INVALID_SPONSOR_NAME:'Enter a name of up to 60 characters.'};
 
 async function handleRequest(req,res,payment=false){
   res.set('Cache-Control','private, no-store');res.set('X-Content-Type-Options','nosniff');
@@ -75,13 +85,13 @@ async function handleRequest(req,res,payment=false){
     const uid=identity(req,res);await limit(req,route);
     const game=payment?null:gameService();
     const sponsors=payment?paymentServices().sponsors:null;
-    if(route==='puzzle'&&req.method==='GET'){const puzzle=game.getPuzzle(req.query.day);res.json(puzzle);return;}
-    if(route==='sponsors'&&req.method==='GET'){res.json(await sponsors.list());return;}
+    if(route==='puzzle'&&req.method==='GET'){const puzzle=game.getPuzzle(req.query.day,req.query.mode);res.json(puzzle);return;}
+    if(route==='sponsors'&&req.method==='GET'){res.json(await sponsors.list(req.query.url));return;}
     if(route==='session'&&req.method==='POST'){const result=await game.startSession(uid,req.body);await countEvent('game_start',uid,result.puzzleId);res.json(result);return;}
     if(route==='result'&&req.method==='POST'){const result=await game.submitResult(uid,req.body);await countEvent('puzzle_complete',uid,result.puzzleId);res.json(result);return;}
     if(route==='report'&&req.method==='POST'){res.json(await game.reportWord(uid,req.body));return;}
-    if(route==='checkout'&&req.method==='POST'){const requestOrigin=req.get('origin');const returnOrigin=publicOrigins.includes(requestOrigin)?requestOrigin:origin;const result=await sponsors.checkout(uid,req.body,returnOrigin);await countEvent('checkout_start',uid);res.json(result);return;}
-    if(route==='event'&&req.method==='POST'){if(req.body?.mode!=='swap-adjacent-v3'||!events.has(req.body?.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid);res.status(204).end();return;}
+    if(route==='checkout'&&req.method==='POST'){const requestOrigin=req.get('origin');const returnOrigin=publicOrigins.includes(requestOrigin)?requestOrigin:origin;const result=await sponsors.checkout(uid,req.body,returnOrigin);await countEvent('checkout_start',uid,req.body.puzzleId);res.json(result);return;}
+    if(route==='event'&&req.method==='POST'){if(typeof req.body?.puzzleId!=='string'||req.body.mode!==game.getPuzzle(req.body.puzzleId).mode||!events.has(req.body.name)||['game_start','puzzle_complete','checkout_start'].includes(req.body.name))throw new GameError('INVALID_EVENT');await countEvent(req.body.name,uid,req.body.puzzleId);res.status(204).end();return;}
     res.status(404).json({error:'Not found.'});
   }catch(error){const known=error instanceof GameError||error instanceof SponsorError;console.error(JSON.stringify({event:'api_error',route,code:known?error.code:'INTERNAL'}));res.status(known?error.status:503).json({error:messages[error.code]||(known?'That request could not be accepted. Check your input and try again.':'Jumble could not connect. Please try again.'),code:known?error.code:'UNAVAILABLE'});}
 }

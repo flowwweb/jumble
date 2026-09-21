@@ -1,0 +1,27 @@
+{
+  "rulesVersion": "swap-blank-v1",
+  "dictionaryVersion": "swap-blank-words-v1-396b3eafd38a",
+  "dates": [
+    "2026-09-24"
+  ],
+  "maximumBlanks": 1,
+  "wordCount": 11395,
+  "dictionarySha256": "1637452038c0c32cef34deb1b2a95580f72b66052c6a1725dc6c9550e27743cd",
+  "dictionaryWordsSha256": "396b3eafd38ad2acd2747c3a8de85245c2eb459558c0ffc1c7426aee0333ff7c",
+  "corpusSha256": "73a37966f5751d59771fa24caac1eb0f0b55e7a9ab0739250dbae7ea39d0b4b5",
+  "sourceArtifactSha256": "427a77f8ce57ed174cec1c0af5fc51613565d35322717934682b1d91c73c6abb",
+  "displacedOrdinary": {
+    "path": "data/swap-adjacent/puzzles.json",
+    "corpusSha256": "108956edffb01810c18628cc598a04dab424c0a858926c98eed6367212a79966",
+    "id": "2026-09-24",
+    "puzzleSha256": "b813af9aa554bcf30ba29da5627e56d4fc55e2b91a3b9dabab39f8b81fa2a14f"
+  },
+  "proof": {
+    "method": "forward-board-bfs-v1",
+    "exhaustiveBelow": 3,
+    "discoveredStates": 13711,
+    "evaluatedStates": 1729,
+    "elapsedMs": 187.1416999999999
+  },
+  "scheduleStatus": "FROZEN_PENDING_RELEASE_VERIFICATION"
+}

@@ -80,6 +80,18 @@ test('SWAP checkout mode is validated, retained on both returns and cannot alter
   assert.equal((await service.list()).total,0);
 });
 
+test('blank-day checkout requires the assigned mode and preserves it on both returns', async () => {
+  const {service,calls}=fixture('swap-blank-v1');
+  const request=input({puzzleId:'2026-09-18',gameMode:'swap-blank-v1',returnTo:'result'});
+  await assert.rejects(service.checkout(uid,{...request,gameMode:'swap-adjacent-v3'}),{code:'INVALID_RETURN_CONTEXT'});
+  assert.equal(calls.length,0);
+  await service.checkout(uid,request);
+  for(const field of ['success_url','cancel_url']) {
+    const url=new URL(calls[0].params[field]);assert.equal(url.searchParams.get('mode'),'swap-blank-v1');
+    assert.equal(url.searchParams.get('day'),'2026-09-18');assert.equal(url.searchParams.get('view'),'result');
+  }
+});
+
 test('exact join/takeover economics, cumulative credit, whole dollars and cap', () => {
   assert.equal(checkoutCents('join', 10000, 0), 100);
   assert.equal(checkoutCents('takeover', 550, 100), 600);
@@ -89,6 +101,44 @@ test('exact join/takeover economics, cumulative credit, whole dollars and cap', 
   assert.throws(() => checkoutCents('takeover', 1000, 0, 100));
   assert.throws(() => checkoutCents('other', 0, 0));
 });
+test('confirmed visible sponsors have competition ranks and quotes reuse normalized URL credit without writes', async () => {
+  const {service,db,calls,event}=fixture();
+  for(const [index,url,amount] of [[1,'https://b.com',500],[2,'https://a.com',500],[3,'https://c.com',200]]) {
+    await service.checkout(uid,input({url,amount,submissionId:`funded-submission-${index}`}));
+    await service.handleEvent(event(`ch_${index}`));
+  }
+  await service.checkout(uid,input({url:'https://pending.com',amount:1000,submissionId:'pending-submission-4'}));
+  const before=structuredClone([...db.records]),callsBefore=calls.length;
+  const wall=await service.list('A.COM/#ignored');
+  assert.deepEqual(wall.rows.map(({url,rank})=>[url,rank]),[['https://a.com/',1],['https://b.com/',1],['https://c.com/',3]]);
+  assert.equal(wall.topCents,500);assert.equal(wall.takeoverCents,100);
+  assert.equal((await service.list('https://new.com')).takeoverCents,600);
+  assert.equal('takeoverCents' in await service.list(),false);
+  assert.deepEqual([...db.records],before);assert.equal(calls.length,callsBefore);
+});
+
+test('quotes include hidden credit and top balance, round whole dollars and fail safely at cap or invalid URL', async () => {
+  const {service,db,calls,event}=fixture();
+  await service.checkout(uid,input({url:'https://hidden.com',amount:600}));
+  await service.handleEvent(event());
+  const listing=[...db.records.keys()].find(path=>path.startsWith('sponsorsTest/'));
+  db.records.get(listing).hidden=true;
+  db.records.get(listing).cents=550;
+  const before=structuredClone([...db.records]),callsBefore=calls.length;
+  const quote=await service.list('HIDDEN.COM/#fragment');
+  assert.equal(quote.rows.length,0);assert.equal(quote.topCents,550);assert.equal(quote.takeoverCents,100);
+  assert.equal((await service.list('new.com')).takeoverCents,700);
+  for(const url of ['',{},['https://hidden.com'],'javascript:alert(1)','http://hidden.com']) {
+    await assert.rejects(service.list(url),{code:'INVALID_SPONSOR_URL'});
+  }
+  assert.deepEqual([...db.records],before);assert.equal(calls.length,callsBefore);
+  db.records.get(listing).cents=1_000_000;
+  await assert.rejects(service.list('new.com'),{code:'TAKEOVER_LIMIT_EXCEEDED',status:400});
+  assert.equal((await service.list('hidden.com')).takeoverCents,100);
+  assert.equal((await service.list()).topCents,1_000_000);
+  assert.equal(calls.length,callsBefore);
+});
+
 test('URLs are public HTTPS only and normalize aliases/fragments', () => {
   assert.equal(sponsorUrl('Example.COM/#a'), 'https://example.com/');
   assert.equal(sponsorUrl('@example'), 'https://x.com/example');
@@ -130,7 +180,7 @@ test('concurrent checkout and webhook retries reuse a single provider session an
   await Promise.all([service.handleEvent(event()), service.handleEvent(event())]);
   assert.equal((await service.list()).totalCents, 100);
   const row = (await service.list()).rows[0];
-  assert.deepEqual(row, { name: 'Example', url: 'https://example.com/', cents: 100 });
+  assert.deepEqual(row, { name: 'Example', url: 'https://example.com/', cents: 100, rank: 1 });
 });
 test('fresh charge state defeats stale refund snapshots; recorded refunds cannot resurrect', async () => {
   const { service, event, charges } = fixture();
@@ -187,7 +237,7 @@ test('cumulative URL credit reduces takeover price and new payer cannot overwrit
   const next = await service.checkout('different-anonymous-player', input({ submissionId: 'third-submission-123', name: 'Impersonation', mode: 'takeover', amount: undefined }));
   assert.equal(next.cents, 600);
   await service.handleEvent(event('ch_3'));
-  assert.deepEqual((await service.list()).rows[0], { name: 'Example', url: 'https://example.com/', cents: 1100 });
+  assert.deepEqual((await service.list()).rows[0], { name: 'Example', url: 'https://example.com/', cents: 1100, rank: 1 });
 });
 test('hidden listings stay hidden after later payments and retain economic balance', async () => {
   const { service, event, db } = fixture();
