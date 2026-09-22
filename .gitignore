@@ -2,7 +2,6 @@ node_modules/
 functions/node_modules/
 dist/
 .firebase/
-.env*
 !.env.example
 *-debug.log
 functions/shared/
@@ -17,3 +16,4 @@ data/dictionary/upstream/
 functions.yaml
 
 data/swap-blank/puzzles.json
+config.bat

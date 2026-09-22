@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readHistory,summarizeHistory,resultShare,todayLinkVisible} from '../src/results.ts';
+import {readHistory,summarizeHistory,resultShare,todayLinkVisible,swapSpread} from '../src/results.ts';
 test('open daily board becomes historical at UTC midnight without changing its identity',()=>{
   const day='2026-09-20';
   assert.equal(todayLinkVisible(day,Date.parse('2026-09-20T23:59:59.999Z')),false);
@@ -26,4 +26,12 @@ test('sharing hides words by default and preserves the dated challenge',()=>{
   const text=resultShare('2026-09-19',['outdoors','shelter'],url);
   assert.ok(text.includes(url));assert.ok(!/outdoors|shelter/i.test(text));
   assert.ok(resultShare('2026-09-19',['outdoors','shelter'],url,true,2).includes('OUTDOORS'));
+});
+
+test('swap spread bins verified scores and pads previews without changing real counts',()=>{
+ assert.deepEqual(swapSpread(3,undefined,true),{bins:[3,8,15,16,10,6],total:58,sample:true});
+ for(const n of [0,1,57,58,59]){const counts={3:n},a=swapSpread(3,counts,true);assert.equal(a.bins.reduce((x,y)=>x+y),Math.max(58,n));assert.deepEqual(a,swapSpread(3,counts,true));assert.deepEqual(counts,{3:n});if(n>=58)assert.deepEqual(a.bins,[n,0,0,0,0,0]);assert.equal(swapSpread(3,counts).total,n);}
+ assert.deepEqual(swapSpread(3,{3:1,4:2,5:3,6:4,7:5,8:6,999:7}).bins,[1,2,3,4,5,13]);
+ assert.deepEqual(swapSpread(3,{3:57},true).bins,[57,0,0,1,0,0]);
+ for(const counts of [undefined,{2:1},{3:-1},{3:1.5},{1001:1},{'3x':1}])assert.equal(swapSpread(3,counts),null);
 });
