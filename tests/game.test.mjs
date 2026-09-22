@@ -111,7 +111,7 @@ test('SWAP accepted retries refresh current ranks without mutating best result o
   const session=await game.startSession(uid,context);
   const submit=actions=>game.submitResult(uid,{...context,sessionId:session.sessionId,actions});
   const initial=await submit(slow);
-  assert.equal(initial.rank,1);assert.equal(initial.total,1);
+  assert.equal(initial.rank,1);assert.equal(initial.total,1);assert.deepEqual(initial.counts,{2:1});
   advance(1000);
   for(const [player,actions] of [['second-anonymous-user',fast],['third-anonymous-user',slow]]) {
     const other=await game.startSession(player,context);
@@ -120,7 +120,7 @@ test('SWAP accepted retries refresh current ranks without mutating best result o
   const before=structuredClone([...records]);
   advance(1000);
   const [equal,worse]=await Promise.all([submit(slow),submit([extra,{type:'undo'},...slow])]);
-  assert.deepEqual(equal,worse);
+  assert.deepEqual(equal,worse);assert.deepEqual(equal.counts,{1:1,2:2});
   assert.equal(equal.rank,2);assert.equal(equal.total,3);assert.equal(equal.tied,2);
   assert.equal(equal.rankingAsOf,initial.rankingAsOf+2000);
   for(const field of ['moves','actions','board','words','elapsedMs','completedAt','firstCompletedAt']) assert.deepEqual(equal[field],initial[field]);
@@ -132,7 +132,7 @@ test('SWAP accepted retries refresh current ranks without mutating best result o
   const refreshed=await submit(slow);
   assert.equal(refreshed.moves,1);assert.equal(refreshed.rank,1);assert.equal(refreshed.total,3);
   assert.equal(refreshed.rankingAsOf,improved.rankingAsOf+1000);
-  assert.deepEqual(refreshed.actions,fast);
+  assert.deepEqual(refreshed.actions,fast);assert.deepEqual(refreshed.counts,{1:2,2:1});assert.ok([...records].filter(([path])=>path.includes('/results/')).every(([,value])=>!('counts' in value)));
 });
 
 test('optimal solution appears only after completion with an exact bound trusted receipt and legal witness', async () => {

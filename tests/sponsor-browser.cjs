@@ -12,11 +12,14 @@ const {chromium}=require(process.argv[2]);
   const funded=['funded','loading'].includes(fixture);
   assert.equal(await page.locator('#sponsor-spotlight article').count(),funded?3:0);
   if(funded){assert.equal(await page.locator('#sponsor-title').textContent(),'Top sponsors');assert.deepEqual(await page.locator('#sponsor-spotlight .sponsor-place').allTextContents(),['#1','#1','#3']);}
-  else assert.match(await page.locator('#sponsor-spotlight').textContent(),fixture==='error'?/could not load/:/first.*\$1/);
+  else assert.match(await page.locator('#sponsor-spotlight').textContent(),/Meet the sponsors/);
   assert.ok((await page.locator('#sponsors-link').boundingBox()).height>=44);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.locator('#sponsors-link').click();await page.waitForFunction(()=>document.querySelector('#sponsor-spotlight').getAttribute('aria-busy')==='false');
   assert.equal(await page.locator('#sponsor-wall .featured').count(),funded?2:0);
+  assert.equal(await page.locator('.project-card').count(),10);assert.match(await page.locator('.featured-projects').textContent(),/Not paid sponsors/);assert.equal(await page.locator('.project-card .sponsor-place,.project-card .sponsor-total').count(),0);
+  assert.deepEqual(await page.locator('.project-card strong').allTextContents(),['flowwweb.com','nemoboat.app','boatpedia.co','rstrapp.com','unbake.ai','rightwork.me','whxtever.com','fontgoblin.ai','botlord.ai','glizz.me']);
+  if(fixture==='empty')assert.match(await page.locator('#sponsor-wall').textContent(),/The wall is waiting for its first sponsor/);
   await page.locator('#sponsor-mode').selectOption('takeover');assert.equal(await page.locator('#sponsor-checkout').isDisabled(),true);
   if(fixture!=='error'){
    await page.locator('#sponsor-url').fill('https://new.com/');

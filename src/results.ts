@@ -33,3 +33,16 @@ export function summarizeHistory(rows: LocalResult[], today: string) {
 export function resultShare(day: string, words: string[], url: string, reveal=false, minimum?: number) {
   return `JUMBLE ${day}\n${words.length} words · 15 letters${words.length===minimum?' · Minimum found':''}\n${words.map(word=>reveal?word.toUpperCase():'🟦'.repeat(word.length)).join('\n')}\nSame letters. Different minds.\n${url}`;
 }
+
+export function swapSpread(minimum:number,counts:Record<string,number>|undefined,preview=false){
+  if(!Number.isSafeInteger(minimum)||minimum<0||minimum>1000||(!counts&&!preview))return null;
+  const bins=[0,0,0,0,0,0],weights=[3,8,15,16,10,6];
+  for(const [score,count] of Object.entries(counts||{})){
+    if(!/^(0|[1-9]\d*)$/.test(score)||!Number.isSafeInteger(Number(score))||Number(score)<minimum||Number(score)>1000||!Number.isSafeInteger(count)||count<0)return null;
+    bins[Math.min(5,Number(score)-minimum)]+=count;
+  }
+  const total=bins.reduce((a,b)=>a+b,0);if(!Number.isSafeInteger(total))return null;
+  const sample=preview&&total<58;
+  if(sample){const missing=58-total,shares=weights.map(w=>missing*w/58),padding=shares.map(Math.floor),order=shares.map((value,index)=>({index,remainder:value-padding[index]})).sort((a,b)=>b.remainder-a.remainder||a.index-b.index);for(let i=0;i<missing-padding.reduce((a,b)=>a+b,0);i++)bins[order[i].index]++;for(let i=0;i<6;i++)bins[i]+=padding[i];}
+  return {bins,total:sample?58:total,sample};
+}

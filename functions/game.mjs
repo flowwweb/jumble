@@ -122,7 +122,7 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
         const score = swap ? validated.moves : validated.wordCount;
         if (previous && score >= previous[metric]) {
           if (!swap) return previous;
-          return completion(puzzle, { ...previous, ...ranking(statsDoc.data().counts, previous.moves, now()) });
+          return completion(puzzle, { ...previous, ...ranking(statsDoc.data().counts, previous.moves, now()), counts: {...statsDoc.data().counts} });
         }
         const completedAt = now();
         if (!Number.isFinite(session.startedAt) || completedAt < session.startedAt) fail('INVALID_SESSION_TIME', 409);
@@ -139,7 +139,7 @@ export function createGameService({ db, dictionary, dictionaryVersion, puzzles, 
         };
         transaction.set(refs.result, result);
         transaction.set(refs.stats, { counts: swap ? counts : Array.from({length:16}, (_,index) => counts[index] || 0) });
-        return completion(puzzle, result);
+        return completion(puzzle, swap ? {...result,counts} : result);
       });
     },
     async reportWord(uid, input) {
