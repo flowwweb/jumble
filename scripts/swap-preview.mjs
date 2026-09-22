@@ -9,7 +9,7 @@ import { createGameService, GameError } from '../functions/game.mjs';
 import { createDailyService } from '../functions/daily.mjs';
 import { createBlankDictionary } from '../engine/swap-blank.mjs';
 import { createSwapDictionary } from '../engine/swap.mjs';
-import { sponsorUrl, SponsorError } from '../functions/sponsors.mjs';
+import { sponsorUrl, SponsorError, checkoutCents } from '../functions/sponsors.mjs';
 
 const readJson = path => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 export const FIXTURE_DAY = '2099-01-01';
@@ -68,10 +68,11 @@ export function createSwapPreviewServer({dist=fileURLToPath(new URL('../dist/',i
         }
         if(route==='sponsors'&&req.method==='GET'){
           const scenario=new URL(req.headers.referer||`http://${expected}`).searchParams.get('sponsor-fixture');
+          if(scenario==='loading')await new Promise(resolve=>setTimeout(resolve,900));
           if(scenario==='error')return json(503,{error:'Preview sponsor service unavailable.'});
           if(url.searchParams.has('url'))sponsorUrl(url.searchParams.get('url'));
-          const rows=scenario==='funded'?[{name:'Preview sponsor with a deliberately long name for layout checks',url:'https://example.com/',cents:1200,rank:1},{name:'Second preview sponsor',url:'https://example.org/',cents:1200,rank:1},{name:'Third preview sponsor',url:'https://example.net/',cents:500,rank:3}]:[];
-          return json(200,{rows,total:rows.length,totalCents:rows.reduce((sum,r)=>sum+r.cents,0),topCents:rows[0]?.cents||0,...(url.searchParams.has('url')?{takeoverCents:scenario==='funded'?1300:100}:{}),preview:true});
+          const rows=['funded','loading'].includes(scenario)?[{name:'Preview sponsor with a deliberately long name for layout checks',url:'https://example.com/',cents:1200,rank:1},{name:'Second preview sponsor',url:'https://example.org/',cents:1200,rank:1},{name:'Third preview sponsor',url:'https://example.net/',cents:500,rank:3}]:[];
+          return json(200,{rows,total:rows.length,totalCents:rows.reduce((sum,r)=>sum+r.cents,0),topCents:rows[0]?.cents||0,...(url.searchParams.has('url')?{takeoverCents:checkoutCents('takeover',rows[0]?.cents||0,rows.find(row=>row.url===sponsorUrl(url.searchParams.get('url')))?.cents||0)}:{}),preview:true});
         }
         if(route==='checkout'||route==='webhook')return json(403,{error:'Payments are disabled in this isolated preview.'});
         if(req.method!=='POST')return json(405,{error:'Method not allowed.'});

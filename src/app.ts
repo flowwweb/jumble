@@ -77,24 +77,37 @@ el<HTMLFormElement>('report-form').onsubmit=async event=>{
 };
 type Sponsors={rows:{name:string;url:string;cents:number;rank:number}[];topCents:number;takeoverCents?:number};
 function sponsorLink(sponsor:Sponsors['rows'][number]){const link=document.createElement('a'),url=new URL(sponsor.url);link.textContent=sponsor.name;if(url.protocol==='https:'&&!url.username&&!url.password){link.href=url.href;link.target='_blank';link.rel='noopener noreferrer sponsored';}return link;}
-async function loadSponsors(){
-  const data=await api<Sponsors>('sponsors'),spotlight=el('sponsor-spotlight'),wall=el('sponsor-wall');
-  spotlight.replaceChildren();wall.replaceChildren();
-  if(data.rows.length){spotlight.append('Backed by ',sponsorLink(data.rows[0]));for(const sponsor of data.rows){const row=document.createElement('article');row.append(`${sponsor.rank}. `,sponsorLink(sponsor),` · $${(sponsor.cents/100).toFixed(2)}`);wall.append(row);}}
-  else{spotlight.textContent='Keep Jumble coming. Sponsor from $1.';wall.textContent='Be the first to back Jumble.';}
+function sponsorRow(sponsor:Sponsors['rows'][number],featured=false){
+  const row=document.createElement('article'),rank=document.createElement('span'),amount=document.createElement('strong');row.className=featured?'sponsor-rank featured':'sponsor-rank';
+  rank.className='sponsor-place';rank.textContent=`#${sponsor.rank}`;amount.className='sponsor-total';amount.textContent=`$${(sponsor.cents/100).toFixed(2)}`;row.append(rank,sponsorLink(sponsor),amount);return row;
 }
-async function openSponsors(){el<HTMLDialogElement>('sponsor-dialog').showModal();track('sponsor_open');el('sponsor-wall').textContent='Loading sponsors…';try{await loadSponsors();}catch{el('sponsor-wall').textContent='Sponsors could not load. Close and reopen to try again.';}}
-el('sponsors-link').onclick=()=>void openSponsors();
+async function loadSponsors(){
+  const spotlight=el('sponsor-spotlight'),wall=el('sponsor-wall');spotlight.setAttribute('aria-busy','true');el('sponsor-retry').hidden=true;
+  try{
+    const data=await api<Sponsors>('sponsors');spotlight.replaceChildren();wall.replaceChildren();el('sponsor-title').textContent=data.rows.filter(row=>row.rank===1).length>1?'Top sponsors':'Top sponsor';
+    if(data.rows.length){
+      for(const sponsor of data.rows.slice(0,3))spotlight.append(sponsorRow(sponsor));
+      if(data.rows.filter(row=>row.rank===1).length>1){const tie=document.createElement('small');tie.textContent='Tied for #1';spotlight.append(tie);}
+      for(const sponsor of data.rows)wall.append(sponsorRow(sponsor,sponsor.rank===1));
+      const note=document.createElement('p');note.className='sponsor-note';note.textContent='Ranked by confirmed contributions.';wall.append(note);
+    }else{spotlight.textContent='Be the first to back Jumble. Join from $1.';wall.textContent='Be the first to back Jumble. Join from $1.';}
+  }catch{spotlight.textContent='Sponsors could not load.';wall.textContent='Sponsors could not load. Try again.';el('sponsor-retry').hidden=false;}
+  finally{spotlight.setAttribute('aria-busy','false');}
+}
+async function openSponsors(){el<HTMLDialogElement>('sponsor-dialog').showModal();track('sponsor_open');el('sponsor-wall').textContent='Loading sponsors…';await loadSponsors();void updateSponsorQuote();}
+el('sponsors-link').onclick=()=>void openSponsors();el('sponsor-retry').onclick=()=>void loadSponsors();
 let quoteRequest=0;
 async function updateSponsorQuote(){
-  const request=++quoteRequest,takeover=el<HTMLSelectElement>('sponsor-mode').value==='takeover',url=el<HTMLInputElement>('sponsor-url').value;
-  el('amount-label').hidden=takeover;el('takeover-detail').hidden=!takeover;el<HTMLInputElement>('sponsor-amount').disabled=takeover;
-  const option=el<HTMLSelectElement>('sponsor-mode').options[1];option.textContent='Aim for #1';if(!takeover)return;
-  el('takeover-detail').textContent=url?'Checking your link’s contribution…':'Enter your website to see the amount for #1.';if(!url)return;
-  try{const data=await api<Sponsors>(`sponsors?url=${encodeURIComponent(url)}`);if(request!==quoteRequest)return;if(!Number.isSafeInteger(data.takeoverCents))throw Error('The amount could not be checked. Try again.');option.textContent=`Aim for #1 · $${(data.takeoverCents!/100).toFixed(0)}`;el('takeover-detail').textContent='Includes your link’s existing contribution. The top spot can change before payment.';}
+  const request=++quoteRequest,takeover=el<HTMLSelectElement>('sponsor-mode').value==='takeover',input=el<HTMLInputElement>('sponsor-url'),url=input.value;
+  el('amount-label').hidden=takeover;el<HTMLInputElement>('sponsor-amount').disabled=takeover;
+  const option=el<HTMLSelectElement>('sponsor-mode').options[1],aim=el<HTMLButtonElement>('aim-top'),checkout=el<HTMLButtonElement>('sponsor-checkout');option.textContent=aim.textContent='Aim for #1';aim.hidden=takeover;aim.disabled=true;checkout.disabled=takeover;checkout.textContent='Continue to checkout';
+  el('takeover-detail').textContent=url&&input.validity.valid?'Checking your contribution…':'Enter a valid website to see the amount for #1.';if(!url||!input.validity.valid)return;
+  await new Promise(resolve=>setTimeout(resolve,250));if(request!==quoteRequest)return;
+  try{const data=await api<Sponsors>(`sponsors?url=${encodeURIComponent(url)}`);if(request!==quoteRequest)return;if(!Number.isSafeInteger(data.takeoverCents))throw Error('The amount could not be checked. Try again.');option.textContent=aim.textContent=`Aim for #1 · $${(data.takeoverCents!/100).toFixed(0)}`;aim.disabled=false;checkout.disabled=false;if(takeover)checkout.textContent=aim.textContent;el('takeover-detail').textContent='Your previous contribution to the same link counts. The top spot can change before payment.';}
   catch(error){if(request===quoteRequest)el('takeover-detail').textContent=error instanceof Error?error.message:'The amount could not be checked. Try again.';}
 }
-el('sponsor-mode').onchange=()=>void updateSponsorQuote();el('sponsor-url').onchange=()=>void updateSponsorQuote();
+el('sponsor-mode').onchange=()=>void updateSponsorQuote();el('sponsor-url').oninput=()=>void updateSponsorQuote();
+el('aim-top').onclick=()=>{el<HTMLSelectElement>('sponsor-mode').value='takeover';void updateSponsorQuote();};
 el<HTMLFormElement>('sponsor-form').onsubmit = async event => {
   event.preventDefault(); const form = event.currentTarget as HTMLFormElement;
   const button = form.querySelector<HTMLButtonElement>('button[type=submit]')!; button.disabled = true;
@@ -127,4 +140,4 @@ let rolloverTimer:number;
 function updateTodayLink(){clearTimeout(rolloverTimer);el('today-link').hidden=!todayLinkVisible(puzzle.id);rolloverTimer=window.setTimeout(updateTodayLink,86400000-Date.now()%86400000+50);}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&puzzle)updateTodayLink();});
 void boot();
-void loadSponsors().catch(()=>{el('sponsor-spotlight').textContent='Sponsors are unavailable right now.';});
+void loadSponsors();
