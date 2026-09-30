@@ -30,8 +30,8 @@ export function enumerateSwapGoals(input, words, checkBudget = () => {}) {
 }
 
 /** Multi-source bidirectional BFS. A budget exit never reports an optimum. */
-export function solveSwapExact(input, words, { maxStates = 200000, maxMilliseconds = 10000 } = {}) {
-  if (!Number.isInteger(maxStates) || maxStates < 1 || !Number.isFinite(maxMilliseconds) || maxMilliseconds <= 0) throw new TypeError('Invalid search budget.');
+export function solveSwapExact(input, words, { maxStates = 200000, maxMilliseconds = 10000, goalFilter, maxDistance = Infinity } = {}) {
+  if (!Number.isInteger(maxStates) || maxStates < 1 || !Number.isFinite(maxMilliseconds) || maxMilliseconds <= 0 || (maxDistance !== Infinity && (!Number.isInteger(maxDistance) || maxDistance < 0))) throw new TypeError('Invalid search budget.');
   const started = performance.now(), start = normalizeBoard(input).join('');
   const budgetExceeded = Symbol('budget exceeded');
   let goals;
@@ -41,19 +41,24 @@ export function solveSwapExact(input, words, { maxStates = 200000, maxMillisecon
     if (error !== budgetExceeded) throw error;
     return { status: 'UNVERIFIED', reason: 'SEARCH_BUDGET', certificate: { phase: 'goal-enumeration', elapsedMs: performance.now() - started } };
   }
+  const allGoals = new Set(goals);
+  if (goalFilter) goals = goals.filter(goalFilter);
+  const targetGoals = new Set(goals);
   const maps = [new Map([[start, null]]), new Map(goals.map(goal => [goal, null]))];
   let frontiers = [[start], goals], depths = [0, 0], expanded = 0;
   const sha256 = value => createHash('sha256').update(value).digest('hex');
   const binding = { rulesVersion: SWAP_RULES_VERSION, boardSha256: sha256(start), dictionaryWordsSha256: sha256(JSON.stringify(createSwapDictionary(words).words)) };
-  const stats = () => ({ ...binding, algorithm: 'multi-source-bidirectional-bfs-v1', goalCount: goals.length, discoveredStates: maps[0].size + maps[1].size, expandedStates: expanded, completedRadii: [...depths], elapsedMs: performance.now() - started });
+  const stats = () => ({ ...binding, algorithm: goalFilter ? 'terminal-goal-filtered-bidirectional-bfs-v1' : 'multi-source-bidirectional-bfs-v1', goalCount: goals.length, discoveredStates: maps[0].size + maps[1].size, expandedStates: expanded, completedRadii: [...depths], elapsedMs: performance.now() - started });
   const proven = meeting => {
     const halves = maps.map(map => { const path = []; let state = meeting; while (map.get(state)) { const link = map.get(state); path.push(link.action); state = link.parent; } return path; });
     const solution = [...halves[0].reverse(), ...halves[1]];
     return { status: 'PROVEN', minimum: solution.length, solution, certificate: { ...stats(), exhaustiveBelow: solution.length } };
   };
+  if (performance.now() - started >= maxMilliseconds) return { status: 'UNVERIFIED', reason: 'SEARCH_BUDGET', certificate: stats() };
   if (maps[1].has(start)) return proven(start);
-  if (!goals.length) return { status: 'UNSOLVABLE', certificate: stats() };
+  if (!goals.length || (allGoals.has(start) && !targetGoals.has(start))) return { status: 'UNSOLVABLE', certificate: stats() };
   while (frontiers[0].length && frontiers[1].length) {
+    if (depths[0] + depths[1] >= maxDistance) return { status: 'OUTSIDE_LIMIT', limit: maxDistance, certificate: stats() };
     const side = frontiers[0].length <= frontiers[1].length ? 0 : 1;
     const next = [];
     for (const state of frontiers[side]) {
@@ -63,7 +68,7 @@ export function solveSwapExact(input, words, { maxStates = 200000, maxMillisecon
         if (state[action.from] === state[action.to]) continue;
         const letters = [...state]; [letters[action.from], letters[action.to]] = [letters[action.to], letters[action.from]];
         const child = letters.join('');
-        if (maps[side].has(child)) continue;
+        if (maps[side].has(child) || (allGoals.has(child) && !targetGoals.has(child))) continue;
         if (maps[0].size + maps[1].size >= maxStates) return { status: 'UNVERIFIED', reason: 'SEARCH_BUDGET', certificate: stats() };
         maps[side].set(child, { parent: state, action });
         if (maps[1 - side].has(child)) return proven(child);
