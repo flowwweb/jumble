@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 
 export class SponsorError extends Error {
   constructor(code, status = 400) { super(code); this.code = code; this.status = status; }
@@ -107,7 +107,7 @@ export function createSponsorService({ db, stripe, origin, allowedReturnOrigins 
         ]);
         const cents = checkoutCents(payload.mode, top.docs[0]?.data().cents ?? 0, current.exists ? current.data().cents : 0, input.amount);
         const created = { ...payload, cents, fingerprint, createdAt: now(), livemode, returnOrigin: requestOrigin,
-          integrationIdentifier: `jumble-sponsor-${[...randomBytes(8)].map(byte => String.fromCharCode(97 + byte % 26)).join('')}` };
+          integrationIdentifier: `jumble-sponsor-${Array.from({ length: 8 }, () => String.fromCharCode(97 + randomInt(26))).join('')}` };
         transaction.set(reference, created);
         return created;
       });
