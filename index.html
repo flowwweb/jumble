@@ -12,7 +12,7 @@
 <body>
   <main>
     <header><button id="theme" class="icon" aria-label="Use dark theme">◐</button><h1><img id="logo" data-logo alt="Jumble" width="1730" height="909" fetchpriority="high"><span>SWAP</span></h1><button id="help" class="icon" aria-label="How to play">?</button></header>
-    <p id="day" class="eyebrow">DAILY</p><p id="preview-notice" hidden></p>
+    <label class="day-picker"><span>Daily</span><input id="day" type="date" min="2026-09-20" aria-label="Play a past day" disabled></label><p id="preview-notice" hidden></p>
     <section class="intro"><h2 id="headline">Make three words.</h2><p>Swap neighboring letters.</p></section>
     <section id="game" aria-label="Daily Jumble SWAP" aria-busy="true"><div id="tiles" class="tiles" aria-label="Letter tiles"></div><p id="message" role="status" aria-live="polite">Loading today’s letters…</p><div class="game-actions"><strong id="moves">0 swaps</strong><button id="undo" class="icon" aria-label="Undo last swap" disabled>↶</button><button id="reset" class="icon" aria-label="Reset puzzle" disabled>↺</button></div></section>
     <button id="view-result" hidden>View result</button>
