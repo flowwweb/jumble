@@ -45,10 +45,11 @@ const server=createServer(async(req,res)=>{
   await page.waitForFunction(()=>document.querySelector('#sponsor-spotlight').getAttribute('aria-busy')==='false');
   const funded=['funded','loading'].includes(fixture);
   assert.equal(await page.locator('#sponsor-spotlight article').count(),funded?3:0);
-  if(funded){assert.equal(await page.locator('#sponsor-title').textContent(),'Top sponsors');assert.deepEqual(await page.locator('#sponsor-spotlight .sponsor-place').allTextContents(),['#1','#1','#3']);}
-  else {assert.equal(await page.locator('#sponsor-title').textContent(),'Featured project');assert.match(await page.locator('#sponsor-spotlight').textContent(),/Go with Flowwweb/);assert.equal(await page.locator('#sponsor-spotlight .sponsor-place,#sponsor-spotlight .sponsor-total').count(),0);}
+  assert.equal(await page.locator('#sponsor-title').textContent(),'Top sponsor');
+  if(funded)assert.deepEqual(await page.locator('#sponsor-spotlight .sponsor-place').allTextContents(),['#1','#1','#3']);
+  else {assert.match(await page.locator('#sponsor-spotlight').textContent(),fixture==='error'?/Meet the sponsors/:/Go with Flowwweb/);assert.equal(await page.locator('#sponsor-spotlight .sponsor-place,#sponsor-spotlight .sponsor-total').count(),0);}
   await page.waitForFunction(()=>[...document.querySelectorAll('#sponsor-spotlight img')].every(i=>i.complete&&i.naturalWidth>0));
-  assert.ok(await page.locator('#sponsor-spotlight img[src$="flowwweb.png"]').count());
+  assert.equal(await page.locator('#sponsor-spotlight img[src$="flowwweb.png"]').count(),fixture==='error'?0:1);
   assert.equal(await page.getByLabel('Play a past day').inputValue(),'2026-11-12');
   assert.equal(await page.locator('#day').getAttribute('min'),first);assert.equal(await page.locator('#day').getAttribute('max'),today);
   const dateBox=await page.locator('#day').boundingBox();assert.ok(dateBox.height>=44);
@@ -70,24 +71,27 @@ const server=createServer(async(req,res)=>{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.locator('#sponsors-link').click();await page.waitForFunction(()=>document.querySelector('#sponsor-spotlight').getAttribute('aria-busy')==='false');
   assert.equal(await page.locator('#sponsor-wall .featured').count(),funded?2:0);
-  assert.equal(await page.locator('#sponsor-wall .project-card').count(),funded?9:10);assert.match(await page.locator('.featured-projects').textContent(),/Not paid sponsors/);assert.equal(await page.locator('#sponsor-wall .project-card .sponsor-place,#sponsor-wall .project-card .sponsor-total').count(),0);
+  assert.equal(await page.locator('#sponsor-dialog h2').textContent(),'Wall of Fame');assert.equal(await page.locator('#sponsor-wall h3').textContent(),'Sponsors');assert.equal(await page.locator('.featured-projects').getAttribute('aria-label'),'Projects');
+  assert.equal(await page.locator('#sponsor-wall .project-card').count(),funded?9:10);assert.equal(await page.locator('#sponsor-wall .project-card .sponsor-place,#sponsor-wall .project-card .sponsor-total').count(),0);
+  assert.doesNotMatch(await page.locator('#sponsor-dialog').textContent(),/Featured projects|Not paid sponsors|Ranked by confirmed contributions|The highest confirmed contribution/);
+  assert.match(await page.locator('#sponsor-dialog').textContent(),/Thank you for the support\. ❤️/);assert.equal(await page.locator('#sponsor-mode option').first().textContent(),'Join for $1');assert.equal(await page.locator('#sponsor-amount').inputValue(),'1');
   assert.deepEqual(await page.locator('#sponsor-wall .project-card strong').allTextContents(),[...(funded?[]:['flowwweb.com']),'nemoboat.app','boatpedia.co','rstrapp.com','unbake.ai','rightwork.me','whxtever.com','fontgoblin.ai','botlord.ai','glizz.me']);
-  if(fixture==='empty')assert.match(await page.locator('#sponsor-wall').textContent(),/The wall is waiting for its first sponsor/);
+  if(fixture==='empty')assert.doesNotMatch(await page.locator('#sponsor-wall').textContent(),/The wall is waiting for its first sponsor/);
   await page.locator('#sponsor-mode').selectOption('takeover');assert.equal(await page.locator('#sponsor-checkout').isDisabled(),true);
   if(fixture!=='error'){
    await page.locator('#sponsor-url').fill('https://new.com/');
    await page.waitForFunction(()=>!document.querySelector('#aim-top').disabled);
-   assert.equal(await page.locator('#aim-top').textContent(),`Aim for #1 · $${funded?13:1}`);
-   assert.equal(await page.locator('#sponsor-checkout').textContent(),`Aim for #1 · $${funded?13:1}`);
-   if(funded){await page.locator('#sponsor-url').fill('https://flowwweb.com/');await page.waitForFunction(()=>document.querySelector('#aim-top').textContent==='Aim for #1 · $1');}
-   await page.locator('#sponsor-url').fill('invalid');assert.equal(await page.locator('#aim-top').textContent(),'Aim for #1');assert.equal(await page.locator('#sponsor-checkout').isDisabled(),true);
+   assert.equal(await page.locator('#aim-top').textContent(),`Claim #1 · $${funded?13:1}`);
+   assert.equal(await page.locator('#sponsor-checkout').textContent(),`Claim #1 · $${funded?13:1}`);
+   if(funded){await page.locator('#sponsor-url').fill('https://flowwweb.com/');await page.waitForFunction(()=>document.querySelector('#aim-top').textContent==='Claim #1 · $1');}
+   await page.locator('#sponsor-url').fill('invalid');assert.equal(await page.locator('#aim-top').textContent(),'Claim #1');assert.equal(await page.locator('#sponsor-checkout').isDisabled(),true);
   }else assert.equal(await page.locator('#sponsor-retry').isVisible(),true);
   await page.waitForFunction(()=>[...document.querySelectorAll('#sponsor-wall img')].every(i=>i.complete&&i.naturalWidth>0));
   assert.equal(await page.locator('#sponsor-wall img').count(),9);assert.equal(await page.locator('#sponsor-wall a[href="https://whxtever.com/"] img').getAttribute('src'),'/assets/sponsor-icons/whxtever.png');
   for(const [host,initials] of [['glizz.me','GL']]){const icon=page.locator(`#sponsor-wall a[href="https://${host}/"] .project-icon`);assert.equal(await icon.textContent(),initials);assert.equal(await icon.locator('img').count(),0);}
   await page.locator('#sponsor-dialog').evaluate(d=>{document.activeElement.blur();d.scrollTop=0;});
   if(evidence&&['empty','funded','error'].includes(fixture))await page.screenshot({path:path.join(evidence,`${width}-${theme}-${fixture}-wall.png`),fullPage:true});
-  if(fixture==='error'){unavailable=false;await page.locator('#sponsor-retry').click();await page.waitForFunction(()=>document.querySelector('#sponsor-retry').hidden&&document.querySelector('#sponsor-spotlight').getAttribute('aria-busy')==='false');assert.match(await page.locator('#sponsor-wall').textContent(),/waiting for its first sponsor/);}
+  if(fixture==='error'){unavailable=false;await page.locator('#sponsor-retry').click();await page.waitForFunction(()=>document.querySelector('#sponsor-retry').hidden&&document.querySelector('#sponsor-spotlight').getAttribute('aria-busy')==='false');assert.doesNotMatch(await page.locator('#sponsor-wall').textContent(),/waiting for its first sponsor/);assert.equal(await page.locator('#sponsor-title').textContent(),'Top sponsor');assert.match(await page.locator('#sponsor-spotlight').textContent(),/Go with Flowwweb/);}
   assert.equal(await page.locator('#sponsor-dialog').evaluate(d=>d.scrollWidth<=d.clientWidth),true);assert.deepEqual(errors,[]);
   results.push({width,theme,fixture,status:'PASS'});console.log(width,theme,fixture,'PASS');await context.close();
  }}finally{await browser.close();await new Promise(resolve=>server.close(resolve));if(evidence)await fs.writeFile(path.join(evidence,'results.json'),JSON.stringify(results,null,2));}
